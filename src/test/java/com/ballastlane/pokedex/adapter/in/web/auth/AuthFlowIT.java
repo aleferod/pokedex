@@ -73,16 +73,19 @@ class AuthFlowIT {
         .jsonPath("$.username")
         .isEqualTo("gary");
 
-    // And opens the protected area (no endpoint yet, so access control lets it through to 404)
+    // And opens the protected area, statelessly
     client
         .get()
         .uri("/api/v1/local-pokemon")
         .header(HttpHeaders.AUTHORIZATION, bearer)
         .exchange()
         .expectStatus()
-        .isNotFound()
+        .isOk()
         .expectHeader()
-        .doesNotExist(HttpHeaders.SET_COOKIE);
+        .doesNotExist(HttpHeaders.SET_COOKIE)
+        .expectBody()
+        .jsonPath("$.content")
+        .isArray();
 
     // And the password is stored only as a BCrypt hash
     String stored =

@@ -35,6 +35,10 @@ Responses never contain stack traces, exception names, SQL or configuration valu
 - values of the wrong JSON type (`"has the wrong type"`)
 - members the endpoint doesn't accept (`"is not an accepted field"`, for example sending `role` when registering)
 - password-policy violations: one `password` entry per broken rule
+- read-only members (`"is read-only: it comes from PokeAPI or is managed by the service"`), for example `weight` in a local Pokémon update
+- several business rules at once: one entry per offending field, all in the same response (for example `region` and `internalTags`)
+- a `pokeapiId` that PokeAPI doesn't know when creating a local record (`"no Pokémon has this number"`)
+- a malformed `If-Match` header: an entry for `If-Match`. Send one ETag such as `"3"`, `W/"3"`, or `*`.
 
 A body that isn't JSON at all gets the detail `Malformed JSON request body.` and an empty `errors`.
 
@@ -75,13 +79,15 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 ## conflict
 
-**409 Conflict.** The request conflicts with the resource's current state. For example, the resource already exists (when registering, `errors` names the taken field, `username` or `email`, ignoring case), or it was changed by someone else since you read it (for example, a local Pokémon that keeps changing while a sync retries).
+**409 Conflict.** The request conflicts with the resource's current state:
+- **It already exists.** When registering, `errors` names the taken field (`username` or `email`, ignoring case). When creating a local Pokémon, `errors` names `pokeapiId`.
+- **It changed since you read it.** The `If-Match` ETag of a `PUT`, `PATCH` or `DELETE` is outdated, or a local Pokémon keeps changing while a sync retries. Nothing was changed. This API answers 409 here rather than 412, as the exercise asks.
 
 **Fix:** read the current state, then retry with up-to-date data.
 
 ## precondition-failed
 
-**412 Precondition failed.** The `If-Match` ETag you sent no longer matches the resource, because someone else updated it in the meantime.
+**412 Precondition failed.** Reserved. RFC 9110 suggests 412 when an `If-Match` ETag no longer matches, but this API answers that case with [409 conflict](#conflict), as the exercise asks. The type is documented for completeness and isn't currently returned.
 
 **Fix:** fetch the resource again to get the current `ETag`, reapply your change, and retry.
 
@@ -95,11 +101,11 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 **415 Unsupported media type.** The request body's `Content-Type` isn't accepted by this endpoint.
 
-**Fix:** send `Content-Type: application/json`.
+**Fix:** send `Content-Type: application/json`. `PATCH` on a local Pokémon also accepts `application/merge-patch+json`.
 
 ## precondition-required
 
-**428 Precondition required.** This update has to be conditional, so that it can't silently overwrite somebody else's change.
+**428 Precondition required.** This update has to be conditional, so that it can't silently overwrite somebody else's change. `PUT` and `PATCH` on `/api/v1/local-pokemon/{id}` need an `If-Match` header; `errors` names `If-Match`.
 
 **Fix:** send the resource's current `ETag` in an `If-Match` header.
 

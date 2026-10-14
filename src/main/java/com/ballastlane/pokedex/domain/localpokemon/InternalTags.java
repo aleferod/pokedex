@@ -1,6 +1,7 @@
 package com.ballastlane.pokedex.domain.localpokemon;
 
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,7 +37,8 @@ public record InternalTags(List<String> tags) {
   }
 
   public static InternalTags of(Collection<String> tags) {
-    return new InternalTags(tags == null ? null : List.copyOf(tags));
+    // ArrayList, not List.copyOf: a null tag must become a field error, not an NPE.
+    return new InternalTags(tags == null ? null : new ArrayList<>(tags));
   }
 
   public boolean contains(String tag) {

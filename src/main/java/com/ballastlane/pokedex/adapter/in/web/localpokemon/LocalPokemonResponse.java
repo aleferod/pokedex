@@ -31,4 +31,9 @@ public record LocalPokemonResponse(
     Instant updatedAt,
     Instant syncedAt,
     String createdBy,
-    @Schema(description = "Optimistic-locking version, also sent as the ETag") long version) {}
+    @Schema(description = "Optimistic-locking version, also sent as the ETag") long version) {
+
+  /** Why a client may not set a member that is here but not in a request body. */
+  public static final String READ_ONLY =
+      "is read-only: it comes from PokeAPI or is managed by the service";
+}

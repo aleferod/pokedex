@@ -1,5 +1,6 @@
 package com.ballastlane.pokedex.adapter.in.web.error;
 
+import com.ballastlane.pokedex.adapter.in.web.ReadOnlyMembers;
 import com.ballastlane.pokedex.adapter.in.web.correlation.CorrelationIdFilter;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
 import com.ballastlane.pokedex.domain.localpokemon.DuplicateLocalPokemonException;
@@ -7,6 +8,7 @@ import com.ballastlane.pokedex.domain.localpokemon.LocalPokemonNotFoundException
 import com.ballastlane.pokedex.domain.localpokemon.StaleLocalPokemonException;
 import com.ballastlane.pokedex.domain.pokemon.PokemonNotFoundException;
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
+import com.ballastlane.pokedex.domain.shared.InvalidFieldsException;
 import com.ballastlane.pokedex.domain.user.DuplicateUserException;
 import com.ballastlane.pokedex.domain.user.InvalidCredentialsException;
 import com.ballastlane.pokedex.domain.user.UserNotFoundException;
@@ -136,12 +138,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     Throwable cause = exception.getMostSpecificCause();
     ProblemDetail problem;
     if (cause instanceof UnrecognizedPropertyException unknown) {
-      problem =
-          problems.create(
-              ProblemType.BAD_REQUEST,
-              "The request body contains members this endpoint does not accept.",
-              path(request),
-              List.of(new ProblemFieldError(fieldPath(unknown), "is not an accepted field")));
+      problem = unrecognized(unknown, path(request));
     } else if (cause instanceof MismatchedInputException mismatch
         && !mismatch.getPath().isEmpty()) {
       problem =
@@ -165,6 +162,27 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             INVALID_FIELDS,
             path(request),
             List.of(new ProblemFieldError(exception.field(), exception.reason()))));
+  }
+
+  /** Several domain rules broken at once: one entry per offending field. */
+  @ExceptionHandler(InvalidFieldsException.class)
+  ResponseEntity<Object> handleInvalidFields(InvalidFieldsException exception, WebRequest request) {
+    List<ProblemFieldError> errors =
+        exception.violations().stream()
+            .map(violation -> new ProblemFieldError(violation.field(), violation.reason()))
+            .sorted(Comparator.comparing(ProblemFieldError::field))
+            .toList();
+    return respond(problems.create(ProblemType.BAD_REQUEST, INVALID_FIELDS, path(request), errors));
+  }
+
+  /** A header or hand-read body member is malformed. */
+  @ExceptionHandler(InvalidRequestException.class)
+  ResponseEntity<Object> handleInvalidRequest(
+      InvalidRequestException exception, WebRequest request) {
+    List<ProblemFieldError> errors =
+        exception.errors().stream().sorted(Comparator.comparing(ProblemFieldError::field)).toList();
+    return respond(
+        problems.create(ProblemType.BAD_REQUEST, exception.getMessage(), path(request), errors));
   }
 
   @ExceptionHandler(WeakPasswordException.class)
@@ -197,10 +215,35 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             List.of(new ProblemFieldError(exception.field(), "is already taken"))));
   }
 
-  @ExceptionHandler({DuplicateLocalPokemonException.class, StaleLocalPokemonException.class})
-  ResponseEntity<Object> handleLocalPokemonConflict(
-      RuntimeException exception, WebRequest request) {
+  @ExceptionHandler(DuplicateLocalPokemonException.class)
+  ResponseEntity<Object> handleDuplicateLocalPokemon(
+      DuplicateLocalPokemonException exception, WebRequest request) {
+    return respond(
+        problems.create(
+            ProblemType.CONFLICT,
+            exception.getMessage(),
+            path(request),
+            List.of(new ProblemFieldError("pokeapiId", "is already stored locally"))));
+  }
+
+  /** Optimistic locking: 409 as the brief asks (RFC 9110 would allow 412 for If-Match). */
+  @ExceptionHandler(StaleLocalPokemonException.class)
+  ResponseEntity<Object> handleStaleLocalPokemon(
+      StaleLocalPokemonException exception, WebRequest request) {
     return respond(problems.create(ProblemType.CONFLICT, exception.getMessage(), path(request)));
+  }
+
+  // ---- precondition required (428) ------------------------------------------------------------
+
+  @ExceptionHandler(PreconditionRequiredException.class)
+  ResponseEntity<Object> handlePreconditionRequired(
+      PreconditionRequiredException exception, WebRequest request) {
+    return respond(
+        problems.create(
+            ProblemType.PRECONDITION_REQUIRED,
+            exception.getMessage(),
+            path(request),
+            List.of(new ProblemFieldError(exception.header(), "is required"))));
   }
 
   // ---- authentication (401) -------------------------------------------------------------------
@@ -255,6 +298,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         body instanceof ProblemDetail built ? built : ProblemDetail.forStatus(statusCode);
     return super.createResponseEntity(
         problems.complete(problem, path(request)), headers, statusCode, request);
+  }
+
+  /** A member the request type lacks: read-only when its resource says so, else not accepted. */
+  private ProblemDetail unrecognized(UnrecognizedPropertyException unknown, String path) {
+    String field = fieldPath(unknown);
+    return ReadOnlyMembers.reason(unknown.getReferringClass(), unknown.getPropertyName())
+        .map(
+            reason ->
+                problems.create(
+                    ProblemType.BAD_REQUEST,
+                    "The request body tries to change read-only fields.",
+                    path,
+                    List.of(new ProblemFieldError(field, reason))))
+        .orElseGet(
+            () ->
+                problems.create(
+                    ProblemType.BAD_REQUEST,
+                    "The request body contains members this endpoint does not accept.",
+                    path,
+                    List.of(new ProblemFieldError(field, "is not an accepted field"))));
   }
 
   static String internalErrorDetail(String correlationId) {

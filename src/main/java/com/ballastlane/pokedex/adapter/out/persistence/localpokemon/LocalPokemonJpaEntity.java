@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -77,7 +78,9 @@ public class LocalPokemonJpaEntity {
   @Column(nullable = false)
   private int speed;
 
+  // Batched: a listing page loads every record's names in one extra query, not one per record.
   @ElementCollection(fetch = FetchType.EAGER)
+  @BatchSize(size = 100)
   @CollectionTable(
       name = "local_pokemon_localized_name",
       joinColumns = @JoinColumn(name = "local_pokemon_id"))

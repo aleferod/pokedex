@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
+import com.ballastlane.pokedex.domain.shared.InvalidFieldsException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ProprietaryDataTest {
@@ -52,6 +56,50 @@ class ProprietaryDataTest {
     assertThat(withRegion("x".repeat(50)).region()).hasSize(50);
     assertThat(new ProprietaryData(null, null, "x".repeat(500), null, "y".repeat(2000)).notes())
         .hasSize(2000);
+  }
+
+  @Test
+  void should_reportEveryViolation_when_builtFromRawInput() {
+    assertThatThrownBy(
+            () ->
+                ProprietaryData.of(
+                    Map.of("not a locale", "x"),
+                    "x".repeat(51),
+                    null,
+                    List.of("Bad Tag!"),
+                    "y".repeat(2001)))
+        .isInstanceOfSatisfying(
+            InvalidFieldsException.class,
+            error ->
+                assertThat(error.violations())
+                    .extracting(InvalidFieldException::field)
+                    .containsExactlyInAnyOrder(
+                        "localizedNames", "region", "internalTags", "notes"));
+  }
+
+  @Test
+  void should_equalTheValidatedConstruction_when_rawInputIsValid() {
+    assertThat(
+            ProprietaryData.of(
+                Map.of("pt-BR", "Pikachu"), " Kanto ", null, List.of("Starter"), null))
+        .isEqualTo(
+            new ProprietaryData(
+                LocalizedNames.of(Map.of("pt-BR", "Pikachu")),
+                "Kanto",
+                null,
+                InternalTags.of(List.of("starter")),
+                null));
+  }
+
+  @Test
+  void should_reportTheTagField_when_aTagIsNull() {
+    assertThatThrownBy(() -> ProprietaryData.of(null, null, null, Arrays.asList("ok", null), null))
+        .isInstanceOfSatisfying(
+            InvalidFieldsException.class,
+            error ->
+                assertThat(error.violations())
+                    .extracting(InvalidFieldException::field)
+                    .containsExactly("internalTags"));
   }
 
   private static ProprietaryData withRegion(String region) {

@@ -7,12 +7,13 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** five changes are done.
+> **Status:** six changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
 > - `add-pokemon-detail`: US02, the detailed view with the evolution tree.
 > - `add-local-sync`: US03, the local replica in PostgreSQL with proprietary fields.
+> - `add-local-crud`: US04, listing, creating, editing and deleting local records with ETags and optimistic locking.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
@@ -23,6 +24,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [Catalog (US01)](#catalog-us01)
 - [Detail view (US02)](#detail-view-us02)
 - [Local replica (US03)](#local-replica-us03)
+- [Managing local records (US04)](#managing-local-records-us04)
 - [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
@@ -73,7 +75,11 @@ The full stack with the web app (`docker-compose.full.yml`) and the seeded demo 
 | US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` → 201 import / 200 re-sync | bearer | ✅ |
 | US03 Bulk sync | `POST /api/v1/local-pokemon/sync?limit=N` (1–20, default 10) | bearer | ✅ |
 | US03/US04 Read one | `GET /api/v1/local-pokemon/{id}` (with `ETag`) | bearer | ✅ |
-| US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
+| US04 List | `GET /api/v1/local-pokemon?page&size&tag&name` | bearer | ✅ |
+| US04 Create | `POST /api/v1/local-pokemon` → 201 with `Location` and `ETag` | bearer | ✅ |
+| US04 Replace | `PUT /api/v1/local-pokemon/{id}` with `If-Match` | bearer | ✅ |
+| US04 Partial update | `PATCH /api/v1/local-pokemon/{id}` (JSON Merge Patch) with `If-Match` | bearer | ✅ |
+| US04 Delete | `DELETE /api/v1/local-pokemon/{id}` → 204 | bearer, `ADMIN` | ✅ |
 
 All other management endpoints (`/actuator/env`, `/beans`, `/heapdump`, `/shutdown`, …) are not exposed and return 404.
 
@@ -166,7 +172,7 @@ curl -s -X POST localhost:8080/api/v1/local-pokemon/sync/pikachu -H "Authorizati
 | Field group | Fields | Who changes it |
 |---|---|---|
 | Upstream (PokeAPI) | `name`, `spriteUrl`, `imageUrl`, `category`, `types`, `height`, `weight`, `abilities`, `stats` | only **sync**, which replaces them all |
-| Proprietary | `localizedNames` (`{"pt-BR": "Pikachu"}`), `region`, `habitatNotes`, `internalTags`, `notes` | the business (editing API in US04). Sync **never** touches them. |
+| Proprietary | `localizedNames` (`{"pt-BR": "Pikachu"}`), `region`, `habitatNotes`, `internalTags`, `notes` | the business, through the [US04 API](#managing-local-records-us04). Sync **never** touches them. |
 | Audit | `createdAt`, `createdBy` (the importing user), `updatedAt`, `syncedAt` | the service |
 | Concurrency | `version`, also sent as the `ETag` | increases on every change |
 
@@ -212,7 +218,60 @@ erDiagram
   }
 ```
 
-The schema is owned by Flyway (`V1` baseline, `V2` users, `V3` local replica), and Hibernate only validates it. The domain enforces the proprietary-field rules: tags are 1–30 lower-case `[a-z0-9-]` characters with at most 20 per Pokémon, at most 10 locales, and length limits on the text fields. The editing API exposes them in US04.
+The schema is owned by Flyway (`V1` baseline, `V2` users, `V3` local replica), and Hibernate only validates it.
+
+## Managing local records (US04)
+
+Every authenticated user can list, create and edit local records. Only an `ADMIN` can delete them (registration always creates a `USER`; the demo admin arrives with the seed data).
+
+```bash
+# Create: the upstream fields come from PokeAPI, the proprietary ones from you
+curl -si -X POST localhost:8080/api/v1/local-pokemon -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"pokeapiId": 1, "region": "Kanto", "internalTags": ["starter"], "localizedNames": {"pt-BR": "Bulbassauro"}}'
+# HTTP/1.1 201
+# Location: /api/v1/local-pokemon/<id>
+# ETag: "0"
+
+# List: tag matches exactly, name matches a substring, both ignoring case
+curl -s 'localhost:8080/api/v1/local-pokemon?tag=STARTER&name=saur' -H "Authorization: Bearer $TOKEN"
+
+# Partial update (JSON Merge Patch): send back the ETag you read
+curl -si -X PATCH localhost:8080/api/v1/local-pokemon/<id> -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/merge-patch+json' -H 'If-Match: "0"' \
+  -d '{"notes": "Loves sunlight", "localizedNames": {"ja": "フシギダネ"}}'
+# HTTP/1.1 200
+# ETag: "1"
+
+# The same ETag again is a stale copy: 409 conflict, nothing changes
+```
+
+**Verbs:**
+
+| Request | Effect |
+|---|---|
+| `GET /api/v1/local-pokemon` | The paginated envelope ordered by PokeAPI number. `page` and `size` follow the catalog's rules; `tag` and `name` (each at most 50 characters) combine. |
+| `POST /api/v1/local-pokemon` | Needs `pokeapiId`; the proprietary fields are optional. A duplicate number is **409** with `errors[pokeapiId]`; a number PokeAPI doesn't know is **400** with `errors[pokeapiId]`. |
+| `PUT /{id}` | Replaces **every** proprietary field. A field left out is cleared. |
+| `PATCH /{id}` | JSON Merge Patch ([RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)), sent as `application/merge-patch+json` or `application/json`. An absent member is kept, `null` clears it, and a value replaces it. `localizedNames` merges per locale, and a locale set to `null` is removed. |
+| `DELETE /{id}` | **204**, `ADMIN` only. `If-Match` is optional here. |
+
+Editing changes `updatedAt` and the version. The upstream fields and `syncedAt` stay as they are.
+
+**Optimistic concurrency (no lost updates):**
+- Every single-record response carries `ETag: "<version>"`.
+- `PUT` and `PATCH` must send it back in `If-Match`. `"3"`, `W/"3"` and `*` (any version) are accepted; anything else is a 400 naming `If-Match`.
+- A missing `If-Match` gets **428** `precondition-required`, so a client can't overwrite blindly.
+- An outdated one gets **409** `conflict`, and nothing changes. The version is checked by the use case and again by JPA `@Version` when saving, which catches a writer that slipped in between.
+- **409, not 412:** RFC 9110 suggests 412 Precondition Failed for a failed `If-Match`. The exercise asks for 409 on a stale update, so this API answers 409, and a client treats both the same way: reload, reapply, retry.
+
+**Defensive rules:**
+- **Read-only fields.** The upstream fields (`name`, `spriteUrl`, `imageUrl`, `category`, `types`, `height`, `weight`, `abilities`, `stats`) and the identity and audit fields (`id`, `version`, `createdAt`, `updatedAt`, `syncedAt`, `createdBy`, and `pokeapiId` outside `POST`) can't be set. Sending one is a 400 whose `errors` entry says it `is read-only: it comes from PokeAPI or is managed by the service`. `PATCH` lists every such member. `POST` and `PUT` name the first one, because Jackson stops there.
+- **Proprietary rules,** enforced by the domain value objects:
+  - `region` at most 50 characters, `habitatNotes` at most 500 and `notes` at most 2000. Text is trimmed, and blank text becomes `null`.
+  - `internalTags`: at most 20 tags, each 1–30 lower-case letters, digits or hyphens, starting with a letter or digit. Tags are lower-cased and de-duplicated.
+  - `localizedNames`: at most 10 locales such as `pt-BR`, with names of 1–50 characters.
+- **Every problem at once.** A request that breaks several rules gets one 400 listing each field (Notification pattern), for example `region` and `internalTags` together. Wrong JSON types and unknown members are named the same way.
 
 ## Authentication
 
@@ -329,7 +388,10 @@ flowchart LR
 | Value Object | `PokemonId`, `PokemonIdentifier` (sealed: by id or by name), `Weight`, `Height`, `BaseStats`, `PageRequest`, `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`, `PokeApiProperties` | ✅ |
 | Factory | `User.register` (always `USER`) / `User.restore`; `LocalPokemon.importFrom` | ✅ |
 | Aggregate | `LocalPokemon` (`importFrom`, `resyncWith`: upstream replaced, proprietary data kept) | ✅ |
-| Optimistic locking | `version` / `@Version`, surfaced as `ETag` | ✅ |
+| Optimistic Offline Lock | `version` / `@Version` surfaced as `ETag`; `If-Match` → `ExpectedVersion`, checked by the use case and again by JPA at save | ✅ |
+| Notification | `ProprietaryData.of` collects every rule violation into `InvalidFieldsException`; `MergePatchReader` does the same for read-only, unknown and wrongly typed members | ✅ |
+| Merge Patch (tri-state field) | `FieldPatch` (sealed: `Keep`, `Clear`, `Set`), `LocalizedNamesPatch`, `ProprietaryPatch` | ✅ |
+| Specification-style filter | `LocalPokemonFilter` → native query that uses the GIN tag index | ✅ |
 | Chain of Responsibility | `PasswordPolicy` → `PasswordRule` chain (length, character classes) | ✅ |
 | Repository | `UserRepositoryPort` ← `UserPersistenceAdapter`, `LocalPokemonRepositoryPort` ← `LocalPokemonPersistenceAdapter` (Spring Data) | ✅ |
 | Adapter | `BCryptPasswordHasher`, `JwtTokenIssuer` behind application ports | ✅ |
@@ -338,7 +400,7 @@ flowchart LR
 | Strategy | `EvolutionConditionStrategy` (`LevelUpCondition`, `UseItemCondition`, `TradeCondition`, `FallbackCondition`), chosen per PokeAPI trigger by `EvolutionConditions`. The chain itself stays a tree rather than being flattened, so branching isn't lost. | ✅ |
 | Composite-style tree | `EvolutionStage` / `EvolutionStageResponse` (recursive) | ✅ |
 | Decorator / Proxy | Spring Cache around the catalog port | planned |
-| DTO + Mapper | `AuthWebMapper`, `PokemonWebMapper`, `UserPersistenceMapper` (MapStruct) | ✅ |
+| DTO + Mapper | `AuthWebMapper`, `PokemonWebMapper`, `LocalPokemonWebMapper`, `UserPersistenceMapper` (MapStruct), `LocalPokemonPersistenceMapper` | ✅ |
 
 ## Tech stack
 
@@ -455,7 +517,7 @@ Each item is one OpenSpec change and one pull request:
 3. ✅ `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
 4. ✅ `add-pokemon-detail`: US02 stats, description, evolution chain
 5. ✅ `add-local-sync`: US03 import into PostgreSQL with proprietary fields
-6. `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
+6. ✅ `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
 7. `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. `add-seed-data`: demo users and about 10 local Pokémon
 9. `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
@@ -465,6 +527,8 @@ Each item is one OpenSpec change and one pull request:
 - **One module plus ArchUnit, not multi-module Maven.** Easier to read and review. The layering is enforced when tests run, not when code compiles. See ADR-0001.
 - **Empty `V1__baseline.sql`.** Tables arrive with the feature that needs them, so the history reads one capability per change.
 - **Squash merges.** `main` stays linear. The red/green TDD commits remain visible in each pull request.
+- **409 instead of 412 for a stale `If-Match`.** The exercise asks for 409. The 412 problem type stays documented but isn't returned.
+- **Native SQL for the local list.** The tag filter uses PostgreSQL array containment so the GIN index serves it. That ties the query to PostgreSQL, which is the only database, and Testcontainers runs the real one. `name` matches the PokeAPI name only; searching localized names is future work.
 - **Auth limits:** HS256 shared secret, no refresh tokens or revocation, no login rate limiting. Each is mitigated and has a next step in ADR-0002.
 - **Future work:**
   - structured JSON logs and distributed tracing (Micrometer/OpenTelemetry)

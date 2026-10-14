@@ -1,9 +1,12 @@
 package com.ballastlane.pokedex.adapter.in.web.localpokemon;
 
+import com.ballastlane.pokedex.adapter.in.web.PageResponse;
 import com.ballastlane.pokedex.adapter.in.web.pokemon.PokemonDetailResponse.BaseStatsResponse;
 import com.ballastlane.pokedex.application.port.in.localpokemon.BulkSyncResult;
+import com.ballastlane.pokedex.application.port.in.localpokemon.ProprietaryValues;
 import com.ballastlane.pokedex.domain.localpokemon.LocalPokemon;
 import com.ballastlane.pokedex.domain.localpokemon.UpstreamData;
+import com.ballastlane.pokedex.domain.shared.Page;
 
 /** DTO + Mapper: local replica domain objects to the API's JSON shapes. */
 final class LocalPokemonWebMapper {
@@ -40,6 +43,28 @@ final class LocalPokemonWebMapper {
         pokemon.audit().syncedAt(),
         pokemon.audit().createdBy(),
         version(pokemon));
+  }
+
+  static PageResponse<LocalPokemonResponse> toResponse(Page<LocalPokemon> page) {
+    return PageResponse.of(page, LocalPokemonWebMapper::toResponse);
+  }
+
+  static ProprietaryValues toValues(CreateLocalPokemonRequest request) {
+    return new ProprietaryValues(
+        request.localizedNames(),
+        request.region(),
+        request.habitatNotes(),
+        request.internalTags(),
+        request.notes());
+  }
+
+  static ProprietaryValues toValues(ReplaceLocalPokemonRequest request) {
+    return new ProprietaryValues(
+        request.localizedNames(),
+        request.region(),
+        request.habitatNotes(),
+        request.internalTags(),
+        request.notes());
   }
 
   static BulkSyncResponse toResponse(BulkSyncResult result) {

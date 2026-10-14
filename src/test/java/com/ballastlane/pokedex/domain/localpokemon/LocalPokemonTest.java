@@ -2,6 +2,7 @@ package com.ballastlane.pokedex.domain.localpokemon;
 
 import static com.ballastlane.pokedex.domain.localpokemon.LocalPokemonFixtures.pikachu;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import java.time.Instant;
@@ -58,5 +59,50 @@ class LocalPokemonTest {
     assertThat(resynced.id()).isEqualTo(stored.id());
     assertThat(resynced.pokeapiId()).isEqualTo(stored.pokeapiId());
     assertThat(resynced.version()).isEqualTo(3L);
+  }
+
+  @Test
+  void should_changeOnlyProprietaryDataAndUpdatedAt_when_editedByTheBusiness() {
+    // Given
+    LocalPokemon stored =
+        new LocalPokemon(
+            LocalPokemonId.random(),
+            new PokemonId(25),
+            pikachu(60),
+            ProprietaryData.empty(),
+            new AuditInfo(IMPORTED, IMPORTED, IMPORTED, "ash"),
+            2L);
+    ProprietaryData edited = new ProprietaryData(null, "Johto", null, null, "edited");
+
+    // When
+    LocalPokemon updated = stored.withProprietary(edited, RESYNCED);
+
+    // Then
+    assertThat(updated.proprietary()).isEqualTo(edited);
+    assertThat(updated.upstream()).isEqualTo(stored.upstream());
+    assertThat(updated.audit()).isEqualTo(new AuditInfo(IMPORTED, RESYNCED, IMPORTED, "ash"));
+    assertThat(updated.version()).isEqualTo(2L);
+  }
+
+  @Test
+  void should_passOnlyForTheCurrentVersion_when_versionIsRequired() {
+    LocalPokemon stored =
+        new LocalPokemon(
+            LocalPokemonId.random(),
+            new PokemonId(25),
+            pikachu(60),
+            ProprietaryData.empty(),
+            new AuditInfo(IMPORTED, IMPORTED, IMPORTED, "ash"),
+            3L);
+
+    stored.requireVersion(3L);
+    assertThatThrownBy(() -> stored.requireVersion(2L))
+        .isInstanceOf(StaleLocalPokemonException.class);
+    assertThatThrownBy(
+            () ->
+                LocalPokemon.importFrom(
+                        LocalPokemonId.random(), new PokemonId(1), pikachu(60), "ash", IMPORTED)
+                    .requireVersion(0L))
+        .isInstanceOf(StaleLocalPokemonException.class);
   }
 }

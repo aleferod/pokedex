@@ -37,6 +37,28 @@ public record LocalPokemon(
         null);
   }
 
+  /** Business edit: new proprietary data; upstream data and the last sync time are unchanged. */
+  public LocalPokemon withProprietary(ProprietaryData newProprietary, Instant now) {
+    return new LocalPokemon(
+        id,
+        pokeapiId,
+        upstream,
+        newProprietary,
+        new AuditInfo(audit.createdAt(), now, audit.syncedAt(), audit.createdBy()),
+        version);
+  }
+
+  /**
+   * Optimistic Offline Lock: the caller read version {@code expected}.
+   *
+   * @throws StaleLocalPokemonException when the record has moved on (or was never stored)
+   */
+  public void requireVersion(long expected) {
+    if (version == null || version != expected) {
+      throw new StaleLocalPokemonException(id);
+    }
+  }
+
   /** Re-sync: new upstream data; proprietary data and creation audit are kept as they are. */
   public LocalPokemon resyncWith(UpstreamData newUpstream, Instant now) {
     return new LocalPokemon(
