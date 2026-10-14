@@ -193,6 +193,7 @@ class PokemonControllerTest {
       new PokemonDetail(
           new PokemonId(1),
           "bulbasaur",
+          "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png",
           "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png",
           "Seed Pokémon",
           "While it is young, it uses the nutrients that are stored in the seed on its back.",

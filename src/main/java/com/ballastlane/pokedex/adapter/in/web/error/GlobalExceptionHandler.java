@@ -2,6 +2,9 @@ package com.ballastlane.pokedex.adapter.in.web.error;
 
 import com.ballastlane.pokedex.adapter.in.web.correlation.CorrelationIdFilter;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
+import com.ballastlane.pokedex.domain.localpokemon.DuplicateLocalPokemonException;
+import com.ballastlane.pokedex.domain.localpokemon.LocalPokemonNotFoundException;
+import com.ballastlane.pokedex.domain.localpokemon.StaleLocalPokemonException;
 import com.ballastlane.pokedex.domain.pokemon.PokemonNotFoundException;
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
 import com.ballastlane.pokedex.domain.user.DuplicateUserException;
@@ -177,9 +180,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   // ---- not found (404) ------------------------------------------------------------------------
 
-  @ExceptionHandler(PokemonNotFoundException.class)
-  ResponseEntity<Object> handlePokemonNotFound(
-      PokemonNotFoundException exception, WebRequest request) {
+  @ExceptionHandler({PokemonNotFoundException.class, LocalPokemonNotFoundException.class})
+  ResponseEntity<Object> handleNotFound(RuntimeException exception, WebRequest request) {
     return respond(problems.create(ProblemType.NOT_FOUND, exception.getMessage(), path(request)));
   }
 
@@ -193,6 +195,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             "An account with this " + exception.field() + " already exists.",
             path(request),
             List.of(new ProblemFieldError(exception.field(), "is already taken"))));
+  }
+
+  @ExceptionHandler({DuplicateLocalPokemonException.class, StaleLocalPokemonException.class})
+  ResponseEntity<Object> handleLocalPokemonConflict(
+      RuntimeException exception, WebRequest request) {
+    return respond(problems.create(ProblemType.CONFLICT, exception.getMessage(), path(request)));
   }
 
   // ---- authentication (401) -------------------------------------------------------------------

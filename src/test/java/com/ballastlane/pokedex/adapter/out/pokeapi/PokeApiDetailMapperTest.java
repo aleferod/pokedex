@@ -29,6 +29,7 @@ class PokeApiDetailMapperTest {
     assertThat(bulbasaur.id()).isEqualTo(new PokemonId(1));
     assertThat(bulbasaur.name()).isEqualTo("bulbasaur");
     assertThat(bulbasaur.imageUrl()).endsWith("/official-artwork/1.png");
+    assertThat(bulbasaur.spriteUrl()).endsWith("/sprites/pokemon/1.png");
     assertThat(bulbasaur.category()).isEqualTo("Seed Pokémon");
     assertThat(bulbasaur.description())
         .isEqualTo(

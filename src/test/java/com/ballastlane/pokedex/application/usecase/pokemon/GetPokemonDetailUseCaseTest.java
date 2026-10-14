@@ -36,6 +36,7 @@ class GetPokemonDetailUseCaseTest {
         new PokemonDetail(
             new PokemonId(132),
             "ditto",
+            "https://img/sprite-132.png",
             "https://img/132.png",
             "Transform Pokémon",
             "It can transform into anything.",

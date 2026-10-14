@@ -4,12 +4,14 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Everything the detail view (US02) shows for one Pokémon. {@code imageUrl}, {@code category} and
- * {@code description} are {@code null} when the source has no value for them.
+ * Everything the detail view (US02) shows for one Pokémon, plus the default sprite kept by the
+ * local replica. {@code spriteUrl}, {@code imageUrl}, {@code category} and {@code description} are
+ * {@code null} when the source has no value for them.
  */
 public record PokemonDetail(
     PokemonId id,
     String name,
+    String spriteUrl,
     String imageUrl,
     String category,
     String description,

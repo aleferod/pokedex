@@ -57,7 +57,7 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 ## not-found
 
-**404 Resource not found.** Nothing exists at this path, or the resource it names doesn't exist. For example, `GET /api/v1/pokemon/missingno` answers `No Pokémon matches 'missingno'.`
+**404 Resource not found.** Nothing exists at this path, or the resource it names doesn't exist. For example, `GET /api/v1/pokemon/missingno` answers `No Pokémon matches 'missingno'.` and `GET /api/v1/local-pokemon/{id}` with an unused id answers `No local Pokémon with id … .`
 
 **Fix:** check the path and the identifier.
 
@@ -75,7 +75,7 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 ## conflict
 
-**409 Conflict.** The request conflicts with the resource's current state. For example, the resource already exists (when registering, `errors` names the taken field, `username` or `email`, ignoring case), or it was changed by someone else since you read it.
+**409 Conflict.** The request conflicts with the resource's current state. For example, the resource already exists (when registering, `errors` names the taken field, `username` or `email`, ignoring case), or it was changed by someone else since you read it (for example, a local Pokémon that keeps changing while a sync retries).
 
 **Fix:** read the current state, then retry with up-to-date data.
 

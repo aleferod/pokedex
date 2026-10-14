@@ -33,6 +33,7 @@ final class PokeApiDetailMapper {
     return new PokemonDetail(
         new PokemonId(pokemon.id()),
         pokemon.name(),
+        pokemon.sprites() == null ? null : pokemon.sprites().frontDefault(),
         officialArtwork(pokemon.sprites()),
         summary.category(),
         newestEnglishDescription(species),

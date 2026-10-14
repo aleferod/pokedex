@@ -7,11 +7,12 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** four changes are done.
+> **Status:** five changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
 > - `add-pokemon-detail`: US02, the detailed view with the evolution tree.
+> - `add-local-sync`: US03, the local replica in PostgreSQL with proprietary fields.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
@@ -21,6 +22,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [User stories and endpoints](#user-stories-and-endpoints)
 - [Catalog (US01)](#catalog-us01)
 - [Detail view (US02)](#detail-view-us02)
+- [Local replica (US03)](#local-replica-us03)
 - [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
@@ -68,8 +70,10 @@ The full stack with the web app (`docker-compose.full.yml`) and the seeded demo 
 | Auth | `GET /api/v1/auth/me` | bearer | ✅ |
 | US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | ✅ |
 | US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | ✅ |
-| US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` | bearer (secured ✅) | planned |
-| US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `GET/PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
+| US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` → 201 import / 200 re-sync | bearer | ✅ |
+| US03 Bulk sync | `POST /api/v1/local-pokemon/sync?limit=N` (1–20, default 10) | bearer | ✅ |
+| US03/US04 Read one | `GET /api/v1/local-pokemon/{id}` (with `ETag`) | bearer | ✅ |
+| US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
 
 All other management endpoints (`/actuator/env`, `/beans`, `/heapdump`, `/shutdown`, …) are not exposed and return 404.
 
@@ -143,6 +147,72 @@ curl -s localhost:8080/api/v1/pokemon/eevee      # or /133, /EEVEE, /Eevee
 - It's a **tree** from the base form, so branching evolutions like Eevee's are represented exactly. Requesting a middle stage (Pikachu) still returns the whole family (Pichu → Pikachu → Raichu).
 - Each `condition` comes from the **Strategy** pattern: one `EvolutionConditionStrategy` per PokeAPI trigger (`level-up`, `use-item`, `trade`, plus a fallback). Each turns PokeAPI's raw evolution data into a sentence.
 - When PokeAPI lists several game-specific methods for one evolution, the first one that doesn't depend on a specific location wins. For Leafeon that's "Use Leaf Stone".
+
+## Local replica (US03)
+
+PokeAPI is read-only, so anything the business adds lives in a **local copy** in PostgreSQL. Each local Pokémon has:
+- a snapshot of its PokeAPI data
+- **proprietary fields**
+- audit columns
+- a version
+
+```bash
+curl -s -X POST localhost:8080/api/v1/local-pokemon/sync/pikachu -H "Authorization: Bearer $TOKEN" -i
+# HTTP/1.1 201
+# Location: /api/v1/local-pokemon/3f6c…
+# ETag: "0"
+```
+
+| Field group | Fields | Who changes it |
+|---|---|---|
+| Upstream (PokeAPI) | `name`, `spriteUrl`, `imageUrl`, `category`, `types`, `height`, `weight`, `abilities`, `stats` | only **sync**, which replaces them all |
+| Proprietary | `localizedNames` (`{"pt-BR": "Pikachu"}`), `region`, `habitatNotes`, `internalTags`, `notes` | the business (editing API in US04). Sync **never** touches them. |
+| Audit | `createdAt`, `createdBy` (the importing user), `updatedAt`, `syncedAt` | the service |
+| Concurrency | `version`, also sent as the `ETag` | increases on every change |
+
+**Sync semantics:**
+- The **first import returns 201**, with `Location` and `ETag`.
+- A **re-sync returns 200**: it refreshes the upstream fields, advances `syncedAt`, keeps every proprietary field and the creation audit, and bumps the version.
+- PokeAPI is read before anything is written, so an unknown Pokémon (404) or an outage (503) leaves the store untouched.
+- **Races:** two concurrent first imports produce **one** record. The unique PokeAPI number makes the loser re-sync the winner (201 + 200). Optimistic locking guards concurrent re-syncs.
+
+```mermaid
+erDiagram
+  local_pokemon ||--o{ local_pokemon_localized_name : "has names"
+  local_pokemon {
+    uuid id PK
+    int pokeapi_id UK
+    varchar name
+    text_array types
+    int height_dm
+    int weight_hg
+    text_array abilities
+    int hp_attack_defense_etc "six stat columns"
+    varchar region "proprietary"
+    varchar habitat_notes "proprietary"
+    text_array internal_tags "proprietary, GIN index"
+    varchar notes "proprietary"
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz synced_at
+    varchar created_by
+    bigint version "optimistic lock / ETag"
+  }
+  local_pokemon_localized_name {
+    uuid local_pokemon_id PK, FK
+    varchar locale PK "pt-BR, ja, ..."
+    varchar name
+  }
+  users {
+    uuid id PK
+    varchar username UK
+    varchar email UK
+    varchar password_hash "BCrypt"
+    varchar role "USER | ADMIN"
+  }
+```
+
+The schema is owned by Flyway (`V1` baseline, `V2` users, `V3` local replica), and Hibernate only validates it. The domain enforces the proprietary-field rules: tags are 1–30 lower-case `[a-z0-9-]` characters with at most 20 per Pokémon, at most 10 locales, and length limits on the text fields. The editing API exposes them in US04.
 
 ## Authentication
 
@@ -257,9 +327,11 @@ flowchart LR
 | Chain of Responsibility | servlet filter chain: `CorrelationIdFilter` → `ProblemDetailCorsFilter` → DispatcherServlet | ✅ |
 | Specification | `ArchitectureRules`: named, reusable architecture rules | ✅ |
 | Value Object | `PokemonId`, `PokemonIdentifier` (sealed: by id or by name), `Weight`, `Height`, `BaseStats`, `PageRequest`, `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`, `PokeApiProperties` | ✅ |
-| Factory | `User.register` (always `USER`) / `User.restore` | ✅ |
+| Factory | `User.register` (always `USER`) / `User.restore`; `LocalPokemon.importFrom` | ✅ |
+| Aggregate | `LocalPokemon` (`importFrom`, `resyncWith`: upstream replaced, proprietary data kept) | ✅ |
+| Optimistic locking | `version` / `@Version`, surfaced as `ETag` | ✅ |
 | Chain of Responsibility | `PasswordPolicy` → `PasswordRule` chain (length, character classes) | ✅ |
-| Repository | `UserRepositoryPort` ← `UserPersistenceAdapter` (Spring Data) | ✅ |
+| Repository | `UserRepositoryPort` ← `UserPersistenceAdapter`, `LocalPokemonRepositoryPort` ← `LocalPokemonPersistenceAdapter` (Spring Data) | ✅ |
 | Adapter | `BCryptPasswordHasher`, `JwtTokenIssuer` behind application ports | ✅ |
 | Adapter / Anti-Corruption Layer | `PokeApiClient` + `dto/*` + `PokeApiMapper` behind `PokemonCatalogPort`: PokeAPI's shapes never leave `adapter.out.pokeapi` | ✅ |
 | Bulkhead | `BoundedFanOut`: virtual threads behind one shared semaphore | ✅ |
@@ -331,9 +403,9 @@ Everything that varies between environments comes from environment variables. `d
 | Unit (domain, use cases) | JUnit 6, AssertJ, Mockito | `PasswordPolicyTest`, `RegisterUserUseCaseTest`, `AuthenticateUserUseCaseTest` |
 | Unit (adapters, config) | JUnit 6, AssertJ | `JwtTokenIssuerTest`, `BCryptPasswordHasherTest`, `CorsPropertiesTest` |
 | Web slice | `@WebMvcTest` via [`@WebSliceTest`](src/test/java/com/ballastlane/pokedex/support/WebSliceTest.java), with real tokens from [`TestTokens`](src/test/java/com/ballastlane/pokedex/support/TestTokens.java) | `AuthControllerTest`, `AccessControlTest`, `InputAndDomainErrorsTest` |
-| Persistence (`*IT`) | `@DataJpaTest` + Testcontainers | `UserPersistenceAdapterIT` |
+| Persistence (`*IT`) | `@DataJpaTest` + Testcontainers | `UserPersistenceAdapterIT`, `LocalPokemonPersistenceAdapterIT` (arrays, localized names, version, duplicates) |
 | PokeAPI adapter | WireMock serving trimmed real captures ([`src/test/resources/pokeapi`](src/test/resources/pokeapi/README.md)) | `PokeApiCatalogAdapterTest` (pages and details: mapping, 404 vs unavailable, refused connection, read timeout, User-Agent, parallel speed-up), `PokeApiDetailMapperTest` (Bulbasaur, Eevee, Pikachu, Ditto), `EvolutionConditionsTest`, `FlavorTextTest`, `BoundedFanOutTest` |
-| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) (WireMock stands in for PokeAPI) | `PokemonCatalogIT`, `PokemonDetailIT`, `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
+| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) (WireMock stands in for PokeAPI) | `LocalPokemonSyncIT` (incl. a real concurrent first-import race), `PokemonCatalogIT`, `PokemonDetailIT`, `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
 | Architecture | ArchUnit | `ArchitectureTest`, `ArchitectureRulesSelfTest` |
 
 Test names follow `should_<expected>_when_<condition>`, with Given / When / Then bodies. Tests are written first: each change's pull request shows a failing `test:` commit before the `feat:` commit that makes it pass.
@@ -382,7 +454,7 @@ Each item is one OpenSpec change and one pull request:
 2. ✅ `add-user-auth`: register/login (JWT), users table, public vs protected routes, roles
 3. ✅ `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
 4. ✅ `add-pokemon-detail`: US02 stats, description, evolution chain
-5. `add-local-sync`: US03 import into PostgreSQL with proprietary fields
+5. ✅ `add-local-sync`: US03 import into PostgreSQL with proprietary fields
 6. `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
 7. `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. `add-seed-data`: demo users and about 10 local Pokémon
