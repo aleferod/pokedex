@@ -111,9 +111,9 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 ## service-unavailable
 
-**503 Service unavailable.** A dependency is temporarily unavailable, for example PokeAPI. The API fails fast instead of hanging.
+**503 Service unavailable.** A dependency is temporarily unavailable. For example, PokeAPI is unreachable, answered with a server error, or didn't respond within the read timeout. The API fails fast instead of hanging. The upstream error is logged with the correlation id, and never returned.
 
-**Fix:** retry after a short wait.
+**Fix:** retry after the number of seconds in the `Retry-After` response header.
 
 ## client-error
 

@@ -7,16 +7,18 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** two changes are done.
+> **Status:** three changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
+> - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
 >
-> The Pokémon user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
+> The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
 ## Contents
 
 - [Quick start](#quick-start)
 - [User stories and endpoints](#user-stories-and-endpoints)
+- [Catalog (US01)](#catalog-us01)
 - [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
@@ -62,12 +64,46 @@ The full stack with the web app (`docker-compose.full.yml`) and the seeded demo 
 | Auth | `POST /api/v1/auth/register` → 201 | public | ✅ |
 | Auth | `POST /api/v1/auth/login` → 200 with bearer token | public | ✅ |
 | Auth | `GET /api/v1/auth/me` | bearer | ✅ |
-| US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | planned |
+| US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | ✅ |
 | US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | planned |
 | US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` | bearer (secured ✅) | planned |
 | US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `GET/PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
 
 All other management endpoints (`/actuator/env`, `/beans`, `/heapdump`, `/shutdown`, …) are not exposed and return 404.
+
+## Catalog (US01)
+
+```bash
+curl -s 'localhost:8080/api/v1/pokemon?page=0&size=2'
+```
+
+```json
+{
+  "content": [
+    { "id": 1, "name": "bulbasaur",
+      "spriteUrl": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png",
+      "category": "Seed Pokémon", "weight": 6.9, "abilities": ["overgrow", "chlorophyll"] },
+    { "id": 2, "name": "ivysaur", "category": "Seed Pokémon", "weight": 13.0, "...": "..." }
+  ],
+  "page": 0, "size": 2, "totalElements": 1351, "totalPages": 676
+}
+```
+
+**Item fields:**
+- `category` is the English genus from `/pokemon-species`.
+- `weight` is in **kilograms**, converted exactly from PokeAPI's hectograms.
+- `abilities` keep PokeAPI's slot order, hidden abilities included.
+- `spriteUrl` and `category` are `null` when PokeAPI has no value.
+
+**Paging:**
+- `page` is zero-based (default 0) and `size` is 1–100 (default 20).
+- Bad values return 400, with one `errors` entry per parameter.
+- A page past the end returns 200 with empty `content`.
+- `totalElements` is PokeAPI's own count, which includes alternate forms (ids 10001+).
+
+**When PokeAPI is unreachable, slow (past the 5 s read timeout) or failing:** the API answers in time with **503** `service-unavailable` and `Retry-After: 30`. It never hangs, and never echoes upstream errors.
+
+**How a page is built:** PokeAPI's list endpoint only returns names, so each entry needs `/pokemon/{id}` and `/pokemon-species/{id}`. That's 1 + 2N calls for a page of N. The adapter fetches entries **in parallel on virtual threads**, behind an instance-wide cap (`max-concurrency`, default 8) that protects PokeAPI. A 10-entry page whose upstream calls take 300 ms each returns in well under a second, against 6 s if fetched sequentially. Caching, retry and the circuit breaker come with `add-caching-resilience`.
 
 ## Authentication
 
@@ -181,15 +217,16 @@ flowchart LR
 | Factory | `ProblemDetailFactory`: the single place that builds problem details | ✅ |
 | Chain of Responsibility | servlet filter chain: `CorrelationIdFilter` → `ProblemDetailCorsFilter` → DispatcherServlet | ✅ |
 | Specification | `ArchitectureRules`: named, reusable architecture rules | ✅ |
-| Value Object | `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`; `PokemonId`, `Weight` planned | ✅ |
+| Value Object | `PokemonId`, `Weight`, `PageRequest`, `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`, `PokeApiProperties` | ✅ |
 | Factory | `User.register` (always `USER`) / `User.restore` | ✅ |
 | Chain of Responsibility | `PasswordPolicy` → `PasswordRule` chain (length, character classes) | ✅ |
 | Repository | `UserRepositoryPort` ← `UserPersistenceAdapter` (Spring Data) | ✅ |
 | Adapter | `BCryptPasswordHasher`, `JwtTokenIssuer` behind application ports | ✅ |
-| Adapter / Anti-Corruption Layer | PokeAPI DTOs → domain mapper | planned |
+| Adapter / Anti-Corruption Layer | `PokeApiClient` + `dto/*` + `PokeApiMapper` behind `PokemonCatalogPort`: PokeAPI's shapes never leave `adapter.out.pokeapi` | ✅ |
+| Bulkhead | `BoundedFanOut`: virtual threads behind one shared semaphore | ✅ |
 | Strategy | evolution-chain flattening | planned |
 | Decorator / Proxy | Spring Cache around the catalog port | planned |
-| DTO + Mapper | `AuthWebMapper`, `UserPersistenceMapper` (MapStruct) | ✅ |
+| DTO + Mapper | `AuthWebMapper`, `PokemonWebMapper`, `UserPersistenceMapper` (MapStruct) | ✅ |
 
 ## Tech stack
 
@@ -200,13 +237,14 @@ flowchart LR
 | PostgreSQL 16 + Flyway | The schema is owned by versioned migrations; Hibernate runs `ddl-auto=validate` only |
 | Spring Security 7 OAuth2 resource server | Standard JWT verification and role mapping; no hand-written token parsing |
 | MapStruct | Mapping generated at compile time; an unmapped field fails the build |
+| `RestClient` on the JDK `HttpClient` + virtual threads | Blocking code that reads simply, with cheap parallel fan-out; no reactive stack for one integration |
 | springdoc-openapi | OpenAPI 3 document and Swagger UI generated from the code |
 | Actuator | Health, liveness/readiness probes and build info; nothing else is exposed |
 | JUnit 6, AssertJ, Mockito, ArchUnit, Testcontainers | Fast unit tests, real-database integration tests, architecture tests ([ADR-0004](docs/adr/0004-testcontainers-over-in-memory-databases.md)) |
 | Spotless (google-java-format), JaCoCo, Maven Enforcer | Formatting, coverage and dependency gates in every build |
 | Docker (multi-stage, layered, non-root) + Compose | One-command local stack; the host needs only Docker |
 
-Coming with later changes: Resilience4j, Caffeine and WireMock.
+Coming with later changes: Resilience4j and Caffeine.
 
 ## Configuration
 
@@ -220,6 +258,7 @@ Everything that varies between environments comes from environment variables. `d
 | `DB_URL` | derived | Optional JDBC URL override for the local profile |
 | `SERVER_PORT` | `8080` | Host port of the API |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated exact origins allowed to call `/api/**`. Wildcards are rejected at startup. |
+| `POKEAPI_BASE_URL` | `https://pokeapi.co/api/v2` | Upstream catalog. Timeouts (2 s connect, 5 s read) and the concurrency cap (8) are under `app.pokeapi.*` in `application.yml`. |
 | `JWT_SECRET` | **none (required)** | HMAC key that signs access tokens, at least 32 bytes. Startup fails naming it if it's missing or short. |
 | `JWT_TTL` | `PT1H` | Access-token lifetime (ISO-8601 duration) |
 | `BCRYPT_STRENGTH` | `10` | BCrypt cost factor |
@@ -253,7 +292,8 @@ Everything that varies between environments comes from environment variables. `d
 | Unit (adapters, config) | JUnit 6, AssertJ | `JwtTokenIssuerTest`, `BCryptPasswordHasherTest`, `CorsPropertiesTest` |
 | Web slice | `@WebMvcTest` via [`@WebSliceTest`](src/test/java/com/ballastlane/pokedex/support/WebSliceTest.java), with real tokens from [`TestTokens`](src/test/java/com/ballastlane/pokedex/support/TestTokens.java) | `AuthControllerTest`, `AccessControlTest`, `InputAndDomainErrorsTest` |
 | Persistence (`*IT`) | `@DataJpaTest` + Testcontainers | `UserPersistenceAdapterIT` |
-| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) | `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
+| PokeAPI adapter | WireMock serving trimmed real captures ([`src/test/resources/pokeapi`](src/test/resources/pokeapi/README.md)) | `PokeApiCatalogAdapterTest` (mapping, 500, refused connection, read timeout, User-Agent, parallel speed-up), `BoundedFanOutTest` |
+| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) (WireMock stands in for PokeAPI) | `PokemonCatalogIT`, `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
 | Architecture | ArchUnit | `ArchitectureTest`, `ArchitectureRulesSelfTest` |
 
 Test names follow `should_<expected>_when_<condition>`, with Given / When / Then bodies. Tests are written first: each change's pull request shows a failing `test:` commit before the `feat:` commit that makes it pass.
@@ -300,7 +340,7 @@ Each item is one OpenSpec change and one pull request:
 
 1. ✅ `bootstrap-project`: platform foundation
 2. ✅ `add-user-auth`: register/login (JWT), users table, public vs protected routes, roles
-3. `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
+3. ✅ `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
 4. `add-pokemon-detail`: US02 stats, description, evolution chain
 5. `add-local-sync`: US03 import into PostgreSQL with proprietary fields
 6. `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking

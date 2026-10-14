@@ -61,6 +61,14 @@ app:
       clock-skew: PT30S
     password:
       bcrypt-strength: ${BCRYPT_STRENGTH:10}
+  pokeapi:
+    base-url: ${POKEAPI_BASE_URL:https://pokeapi.co/api/v2}
+    connect-timeout: PT2S
+    # Deadline for the whole response (Spring applies it to the body read too).
+    read-timeout: PT5S
+    # Instance-wide cap on concurrent PokeAPI detail fetches.
+    max-concurrency: 8
+    user-agent: pokedex-api/@project.version@ (+https://github.com/aleferod/pokedex-api)
   cors:
     # Comma-separated exact origins (no wildcards). Default: the Vite dev server of pokedex-web.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}

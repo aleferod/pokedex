@@ -1,17 +1,22 @@
 package com.ballastlane.pokedex.adapter.in.web.error;
 
 import com.ballastlane.pokedex.adapter.in.web.correlation.CorrelationIdFilter;
+import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
 import com.ballastlane.pokedex.domain.user.DuplicateUserException;
 import com.ballastlane.pokedex.domain.user.InvalidCredentialsException;
 import com.ballastlane.pokedex.domain.user.UserNotFoundException;
 import com.ballastlane.pokedex.domain.user.password.WeakPasswordException;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -21,9 +26,12 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
@@ -45,6 +53,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
   private static final String INVALID_FIELDS = "The request has invalid fields.";
   private static final String BEARER = "Bearer";
+  private static final String RETRY_AFTER_SECONDS = "30";
 
   private final ProblemDetailFactory problems;
 
@@ -67,6 +76,50 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             .toList();
     ProblemDetail problem =
         problems.create(ProblemType.BAD_REQUEST, INVALID_FIELDS, path(request), errors);
+    return handleExceptionInternal(exception, problem, headers, status, request);
+  }
+
+  /** Constraint violations on request parameters (e.g. {@code size=101}): one entry each. */
+  @Override
+  protected ResponseEntity<Object> handleHandlerMethodValidationException(
+      HandlerMethodValidationException exception,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    List<ProblemFieldError> errors = new ArrayList<>();
+    exception
+        .getParameterValidationResults()
+        .forEach(
+            result -> {
+              for (MessageSourceResolvable error : result.getResolvableErrors()) {
+                errors.add(
+                    new ProblemFieldError(
+                        parameterName(result.getMethodParameter()), error.getDefaultMessage()));
+              }
+            });
+    errors.sort(Comparator.comparing(ProblemFieldError::field));
+    ProblemDetail problem =
+        problems.create(ProblemType.BAD_REQUEST, INVALID_FIELDS, path(request), errors);
+    return handleExceptionInternal(exception, problem, headers, status, request);
+  }
+
+  /** A parameter that cannot be converted (e.g. {@code page=abc}). */
+  @Override
+  protected ResponseEntity<Object> handleTypeMismatch(
+      TypeMismatchException exception,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    String field =
+        exception instanceof MethodArgumentTypeMismatchException mismatch
+            ? mismatch.getName()
+            : String.valueOf(exception.getPropertyName());
+    ProblemDetail problem =
+        problems.create(
+            ProblemType.BAD_REQUEST,
+            INVALID_FIELDS,
+            path(request),
+            List.of(new ProblemFieldError(field, "has the wrong type")));
     return handleExceptionInternal(exception, problem, headers, status, request);
   }
 
@@ -146,6 +199,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return unauthorized("The account for this token no longer exists.", request);
   }
 
+  // ---- upstream unavailable (503) -------------------------------------------------------------
+
+  @ExceptionHandler(CatalogUnavailableException.class)
+  ResponseEntity<Object> handleCatalogUnavailable(
+      CatalogUnavailableException exception, WebRequest request) {
+    LOG.warn("Pokémon catalog unavailable: {}", exception.getMessage(), exception.getCause());
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+        .body(
+            problems.create(
+                ProblemType.SERVICE_UNAVAILABLE,
+                "The Pokémon catalog is temporarily unavailable. Try again shortly.",
+                path(request)));
+  }
+
   // ---- everything else (500) ------------------------------------------------------------------
 
   @ExceptionHandler(Exception.class)
@@ -186,6 +254,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static ResponseEntity<Object> respond(ProblemDetail problem) {
     return ResponseEntity.status(problem.getStatus()).body(problem);
+  }
+
+  /** The name the client used: the {@code @RequestParam} name, else the Java parameter name. */
+  private static String parameterName(MethodParameter parameter) {
+    RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+    if (requestParam != null && !requestParam.name().isEmpty()) {
+      return requestParam.name();
+    }
+    return String.valueOf(parameter.getParameterName());
   }
 
   /** JSON path of the offending member, e.g. {@code username} or {@code tags[2]}. */
