@@ -48,25 +48,14 @@
       }
     },
     {
-      "flavor_text": "The plant blooms\nwhen it is\nabsorbing solar\fenergy. It stays\non the move to\nseek sunlight.",
+      "flavor_text": "A bewitching aroma wafts from its flower.\nThe fragrance becalms those engaged\nin a battle.",
       "language": {
         "name": "en",
         "url": "https://pokeapi.co/api/v2/language/9/"
       },
       "version": {
-        "name": "blue",
-        "url": "https://pokeapi.co/api/v2/version/2/"
-      }
-    },
-    {
-      "flavor_text": "The flower on its\nback catches the\nsun's rays.\fThe sunlight is\nthen absorbed and\nused for energy.",
-      "language": {
-        "name": "en",
-        "url": "https://pokeapi.co/api/v2/language/9/"
-      },
-      "version": {
-        "name": "yellow",
-        "url": "https://pokeapi.co/api/v2/version/3/"
+        "name": "shield",
+        "url": "https://pokeapi.co/api/v2/version/34/"
       }
     }
   ]

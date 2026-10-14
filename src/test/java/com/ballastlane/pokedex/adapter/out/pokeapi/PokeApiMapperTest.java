@@ -54,7 +54,9 @@ class PokeApiMapperTest {
         new PokemonSpeciesDto(
             1,
             "bulbasaur",
-            List.of(new PokemonSpeciesDto.Genus("たねポケモン", new NamedResourceDto("ja", null))));
+            List.of(new PokemonSpeciesDto.Genus("たねポケモン", new NamedResourceDto("ja", null))),
+            List.of(),
+            null);
 
     PokemonSummary summary =
         PokeApiMapper.toSummary(
@@ -70,9 +72,12 @@ class PokeApiMapperTest {
             1,
             "bulbasaur",
             69,
-            new PokemonDto.Sprites(null),
+            new PokemonDto.Sprites(null, null),
             List.of(),
-            new NamedResourceDto("bulbasaur", "https://pokeapi.co/api/v2/pokemon-species/1/"));
+            new NamedResourceDto("bulbasaur", "https://pokeapi.co/api/v2/pokemon-species/1/"),
+            7,
+            List.of(),
+            List.of());
 
     PokemonSummary summary =
         PokeApiMapper.toSummary(
@@ -89,11 +94,14 @@ class PokeApiMapperTest {
             25,
             "pikachu",
             60,
-            new PokemonDto.Sprites("https://img/25.png"),
+            new PokemonDto.Sprites("https://img/25.png", null),
             List.of(
                 new PokemonDto.AbilitySlot(3, true, new NamedResourceDto("lightning-rod", null)),
                 new PokemonDto.AbilitySlot(1, false, new NamedResourceDto("static", null))),
-            new NamedResourceDto("pikachu", "https://pokeapi.co/api/v2/pokemon-species/25/"));
+            new NamedResourceDto("pikachu", "https://pokeapi.co/api/v2/pokemon-species/25/"),
+            4,
+            List.of(),
+            List.of());
 
     PokemonSummary summary =
         PokeApiMapper.toSummary(

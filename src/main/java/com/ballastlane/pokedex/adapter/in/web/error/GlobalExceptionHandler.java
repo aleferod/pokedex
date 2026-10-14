@@ -2,6 +2,7 @@ package com.ballastlane.pokedex.adapter.in.web.error;
 
 import com.ballastlane.pokedex.adapter.in.web.correlation.CorrelationIdFilter;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
+import com.ballastlane.pokedex.domain.pokemon.PokemonNotFoundException;
 import com.ballastlane.pokedex.domain.shared.InvalidFieldException;
 import com.ballastlane.pokedex.domain.user.DuplicateUserException;
 import com.ballastlane.pokedex.domain.user.InvalidCredentialsException;
@@ -172,6 +173,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return respond(
         problems.create(
             ProblemType.BAD_REQUEST, "The password is too weak.", path(request), errors));
+  }
+
+  // ---- not found (404) ------------------------------------------------------------------------
+
+  @ExceptionHandler(PokemonNotFoundException.class)
+  ResponseEntity<Object> handlePokemonNotFound(
+      PokemonNotFoundException exception, WebRequest request) {
+    return respond(problems.create(ProblemType.NOT_FOUND, exception.getMessage(), path(request)));
   }
 
   // ---- conflicts (409) ------------------------------------------------------------------------

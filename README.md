@@ -7,10 +7,11 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** three changes are done.
+> **Status:** four changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
+> - `add-pokemon-detail`: US02, the detailed view with the evolution tree.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
@@ -19,6 +20,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [Quick start](#quick-start)
 - [User stories and endpoints](#user-stories-and-endpoints)
 - [Catalog (US01)](#catalog-us01)
+- [Detail view (US02)](#detail-view-us02)
 - [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
@@ -65,7 +67,7 @@ The full stack with the web app (`docker-compose.full.yml`) and the seeded demo 
 | Auth | `POST /api/v1/auth/login` → 200 with bearer token | public | ✅ |
 | Auth | `GET /api/v1/auth/me` | bearer | ✅ |
 | US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | ✅ |
-| US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | planned |
+| US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | ✅ |
 | US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` | bearer (secured ✅) | planned |
 | US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `GET/PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
 
@@ -104,6 +106,43 @@ curl -s 'localhost:8080/api/v1/pokemon?page=0&size=2'
 **When PokeAPI is unreachable, slow (past the 5 s read timeout) or failing:** the API answers in time with **503** `service-unavailable` and `Retry-After: 30`. It never hangs, and never echoes upstream errors.
 
 **How a page is built:** PokeAPI's list endpoint only returns names, so each entry needs `/pokemon/{id}` and `/pokemon-species/{id}`. That's 1 + 2N calls for a page of N. The adapter fetches entries **in parallel on virtual threads**, behind an instance-wide cap (`max-concurrency`, default 8) that protects PokeAPI. A 10-entry page whose upstream calls take 300 ms each returns in well under a second, against 6 s if fetched sequentially. Caching, retry and the circuit breaker come with `add-caching-resilience`.
+
+## Detail view (US02)
+
+```bash
+curl -s localhost:8080/api/v1/pokemon/eevee      # or /133, /EEVEE, /Eevee
+```
+
+```json
+{
+  "id": 133, "name": "eevee",
+  "imageUrl": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/133.png",
+  "category": "Evolution Pokémon",
+  "description": "Harbors the potential to evolve into manifold forms. Within Eevee lies the key to the mysteries of Pokémon evolution—I'm certain of it.",
+  "types": ["normal"], "height": 0.3, "weight": 6.5, "abilities": ["run-away", "adaptability", "anticipation"],
+  "stats": { "hp": 55, "attack": 55, "defense": 50, "specialAttack": 45, "specialDefense": 65, "speed": 55 },
+  "evolutionChain": {
+    "id": 133, "name": "eevee", "condition": null,
+    "evolvesTo": [
+      { "id": 134, "name": "vaporeon", "condition": "Use Water Stone", "evolvesTo": [] },
+      { "id": 196, "name": "espeon", "condition": "Level up with high friendship during the day", "evolvesTo": [] },
+      { "id": 700, "name": "sylveon", "condition": "Level up with high affection knowing a Fairy move", "evolvesTo": [] },
+      "… 8 branches in total"
+    ]
+  }
+}
+```
+
+**Identifier:**
+- A Pokédex number (1–99999), or a name: letters, digits and hyphens, starting with a letter, up to 50 characters, case-insensitive.
+- A malformed identifier returns 400 without any call to PokeAPI. An unknown one returns 404 `not-found`.
+
+**Description:** the newest English flavor text. The line breaks and form feeds of the original game screens are cleaned up.
+
+**Evolution chain:**
+- It's a **tree** from the base form, so branching evolutions like Eevee's are represented exactly. Requesting a middle stage (Pikachu) still returns the whole family (Pichu → Pikachu → Raichu).
+- Each `condition` comes from the **Strategy** pattern: one `EvolutionConditionStrategy` per PokeAPI trigger (`level-up`, `use-item`, `trade`, plus a fallback). Each turns PokeAPI's raw evolution data into a sentence.
+- When PokeAPI lists several game-specific methods for one evolution, the first one that doesn't depend on a specific location wins. For Leafeon that's "Use Leaf Stone".
 
 ## Authentication
 
@@ -217,14 +256,15 @@ flowchart LR
 | Factory | `ProblemDetailFactory`: the single place that builds problem details | ✅ |
 | Chain of Responsibility | servlet filter chain: `CorrelationIdFilter` → `ProblemDetailCorsFilter` → DispatcherServlet | ✅ |
 | Specification | `ArchitectureRules`: named, reusable architecture rules | ✅ |
-| Value Object | `PokemonId`, `Weight`, `PageRequest`, `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`, `PokeApiProperties` | ✅ |
+| Value Object | `PokemonId`, `PokemonIdentifier` (sealed: by id or by name), `Weight`, `Height`, `BaseStats`, `PageRequest`, `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`, `PokeApiProperties` | ✅ |
 | Factory | `User.register` (always `USER`) / `User.restore` | ✅ |
 | Chain of Responsibility | `PasswordPolicy` → `PasswordRule` chain (length, character classes) | ✅ |
 | Repository | `UserRepositoryPort` ← `UserPersistenceAdapter` (Spring Data) | ✅ |
 | Adapter | `BCryptPasswordHasher`, `JwtTokenIssuer` behind application ports | ✅ |
 | Adapter / Anti-Corruption Layer | `PokeApiClient` + `dto/*` + `PokeApiMapper` behind `PokemonCatalogPort`: PokeAPI's shapes never leave `adapter.out.pokeapi` | ✅ |
 | Bulkhead | `BoundedFanOut`: virtual threads behind one shared semaphore | ✅ |
-| Strategy | evolution-chain flattening | planned |
+| Strategy | `EvolutionConditionStrategy` (`LevelUpCondition`, `UseItemCondition`, `TradeCondition`, `FallbackCondition`), chosen per PokeAPI trigger by `EvolutionConditions`. The chain itself stays a tree rather than being flattened, so branching isn't lost. | ✅ |
+| Composite-style tree | `EvolutionStage` / `EvolutionStageResponse` (recursive) | ✅ |
 | Decorator / Proxy | Spring Cache around the catalog port | planned |
 | DTO + Mapper | `AuthWebMapper`, `PokemonWebMapper`, `UserPersistenceMapper` (MapStruct) | ✅ |
 
@@ -292,8 +332,8 @@ Everything that varies between environments comes from environment variables. `d
 | Unit (adapters, config) | JUnit 6, AssertJ | `JwtTokenIssuerTest`, `BCryptPasswordHasherTest`, `CorsPropertiesTest` |
 | Web slice | `@WebMvcTest` via [`@WebSliceTest`](src/test/java/com/ballastlane/pokedex/support/WebSliceTest.java), with real tokens from [`TestTokens`](src/test/java/com/ballastlane/pokedex/support/TestTokens.java) | `AuthControllerTest`, `AccessControlTest`, `InputAndDomainErrorsTest` |
 | Persistence (`*IT`) | `@DataJpaTest` + Testcontainers | `UserPersistenceAdapterIT` |
-| PokeAPI adapter | WireMock serving trimmed real captures ([`src/test/resources/pokeapi`](src/test/resources/pokeapi/README.md)) | `PokeApiCatalogAdapterTest` (mapping, 500, refused connection, read timeout, User-Agent, parallel speed-up), `BoundedFanOutTest` |
-| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) (WireMock stands in for PokeAPI) | `PokemonCatalogIT`, `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
+| PokeAPI adapter | WireMock serving trimmed real captures ([`src/test/resources/pokeapi`](src/test/resources/pokeapi/README.md)) | `PokeApiCatalogAdapterTest` (pages and details: mapping, 404 vs unavailable, refused connection, read timeout, User-Agent, parallel speed-up), `PokeApiDetailMapperTest` (Bulbasaur, Eevee, Pikachu, Ditto), `EvolutionConditionsTest`, `FlavorTextTest`, `BoundedFanOutTest` |
+| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) (WireMock stands in for PokeAPI) | `PokemonCatalogIT`, `PokemonDetailIT`, `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
 | Architecture | ArchUnit | `ArchitectureTest`, `ArchitectureRulesSelfTest` |
 
 Test names follow `should_<expected>_when_<condition>`, with Given / When / Then bodies. Tests are written first: each change's pull request shows a failing `test:` commit before the `feat:` commit that makes it pass.
@@ -341,7 +381,7 @@ Each item is one OpenSpec change and one pull request:
 1. ✅ `bootstrap-project`: platform foundation
 2. ✅ `add-user-auth`: register/login (JWT), users table, public vs protected routes, roles
 3. ✅ `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
-4. `add-pokemon-detail`: US02 stats, description, evolution chain
+4. ✅ `add-pokemon-detail`: US02 stats, description, evolution chain
 5. `add-local-sync`: US03 import into PostgreSQL with proprietary fields
 6. `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
 7. `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker

@@ -1,0 +1,59 @@
+{
+  "id": 132,
+  "name": "ditto",
+  "evolution_chain": {
+    "url": "https://pokeapi.co/api/v2/evolution-chain/66/"
+  },
+  "evolves_from_species": null,
+  "genera": [
+    {
+      "genus": "Transform Pokémon",
+      "language": {
+        "name": "en",
+        "url": "https://pokeapi.co/api/v2/language/9/"
+      }
+    },
+    {
+      "genus": "へんしんポケモン",
+      "language": {
+        "name": "ja",
+        "url": "https://pokeapi.co/api/v2/language/11/"
+      }
+    }
+  ],
+  "flavor_text_entries": [
+    {
+      "flavor_text": "Il a la capacité de modifier sa\nstructure cellulaire pour prendre\nl’apparence de ce qu’il voit.",
+      "language": {
+        "name": "fr",
+        "url": "https://pokeapi.co/api/v2/language/5/"
+      },
+      "version": {
+        "name": "black",
+        "url": "https://pokeapi.co/api/v2/version/17/"
+      }
+    },
+    {
+      "flavor_text": "Capable of copying\nan enemy's genetic\ncode to instantly\ftransform itself\ninto a duplicate\nof the enemy.",
+      "language": {
+        "name": "en",
+        "url": "https://pokeapi.co/api/v2/language/9/"
+      },
+      "version": {
+        "name": "red",
+        "url": "https://pokeapi.co/api/v2/version/1/"
+      }
+    },
+    {
+      "flavor_text": "When it encounters another Ditto, it will move\nfaster than normal to duplicate that opponent exactly.",
+      "language": {
+        "name": "en",
+        "url": "https://pokeapi.co/api/v2/language/9/"
+      },
+      "version": {
+        "name": "shield",
+        "url": "https://pokeapi.co/api/v2/version/34/"
+      }
+    }
+  ]
+}

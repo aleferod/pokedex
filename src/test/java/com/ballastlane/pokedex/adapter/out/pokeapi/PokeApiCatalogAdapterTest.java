@@ -12,6 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
+import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
+import com.ballastlane.pokedex.domain.pokemon.PokemonId;
+import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.shared.Page;
 import com.ballastlane.pokedex.domain.shared.PageRequest;
@@ -20,6 +23,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -163,6 +167,73 @@ class PokeApiCatalogAdapterTest {
     // Then
     assertThat(page.content()).hasSize(10);
     assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(3));
+  }
+
+  // ---- detail (US02) -------------------------------------------------------------------------
+
+  @Test
+  void should_returnTheDetail_when_lookedUpByNumber() {
+    stubDetail("1", 1, 1, 1);
+
+    Optional<PokemonDetail> detail = adapter(8).findDetail(PokemonIdentifier.parse("1"));
+
+    assertThat(detail)
+        .hasValueSatisfying(
+            bulbasaur -> {
+              assertThat(bulbasaur.name()).isEqualTo("bulbasaur");
+              assertThat(bulbasaur.evolutionChain().evolvesTo()).hasSize(1);
+            });
+  }
+
+  @Test
+  void should_askPokeApiInLowerCase_when_lookedUpByNameInAnyCase() {
+    stubDetail("pikachu", 25, 25, 10);
+
+    Optional<PokemonDetail> detail = adapter(8).findDetail(PokemonIdentifier.parse("PIKACHU"));
+
+    assertThat(detail).map(PokemonDetail::id).contains(new PokemonId(25));
+    POKEAPI.verify(getRequestedFor(urlPathEqualTo("/api/v2/pokemon/pikachu")));
+  }
+
+  @Test
+  void should_returnEmpty_when_pokeApiDoesNotKnowThePokemon() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/missingno")).willReturn(aResponse().withStatus(404)));
+
+    assertThat(adapter(8).findDetail(PokemonIdentifier.parse("missingno"))).isEmpty();
+  }
+
+  @Test
+  void should_throwUnavailable_when_anExistingPokemonHasNoSpecies() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-1.json"))));
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon-species/1")).willReturn(aResponse().withStatus(404)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+  }
+
+  @Test
+  void should_throwUnavailable_when_pokeApiFailsOnTheDetail() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1")).willReturn(aResponse().withStatus(500)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+  }
+
+  private static void stubDetail(String pathSegment, int pokemon, int species, int chain) {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/" + pathSegment))
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-" + pokemon + ".json"))));
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon-species/" + species))
+            .willReturn(okJson(PokeApiFixtures.json("species-" + species + ".json"))));
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/evolution-chain/" + chain))
+            .willReturn(okJson(PokeApiFixtures.json("evolution-chain-" + chain + ".json"))));
   }
 
   private static PokeApiCatalogAdapter adapter(int maxConcurrency) {

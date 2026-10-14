@@ -57,7 +57,7 @@ A body that isn't JSON at all gets the detail `Malformed JSON request body.` and
 
 ## not-found
 
-**404 Resource not found.** Nothing exists at this path, or the resource it names doesn't exist (for example, an unknown Pokémon).
+**404 Resource not found.** Nothing exists at this path, or the resource it names doesn't exist. For example, `GET /api/v1/pokemon/missingno` answers `No Pokémon matches 'missingno'.`
 
 **Fix:** check the path and the identifier.
 
