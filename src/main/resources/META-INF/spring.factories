@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.ballastlane.pokedex.infrastructure.config.RequiredSettingsEnvironmentPostProcessor

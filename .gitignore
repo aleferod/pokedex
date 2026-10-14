@@ -23,8 +23,10 @@ target/
 .factorypath
 .apt_generated/
 .sts4-cache/
-bin/
-out/
+# IDE output folders, anchored to the repo root: a bare "out/" would also hide the
+# hexagonal adapter/out and port/out packages.
+/bin/
+/out/
 nbproject/
 
 # OS

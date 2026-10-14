@@ -1,0 +1,4 @@
+# Automated tests: the datasource comes from Testcontainers (@ServiceConnection).
+spring:
+  main:
+    banner-mode: off

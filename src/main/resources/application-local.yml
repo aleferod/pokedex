@@ -1,0 +1,9 @@
+# Running on the host (./mvnw spring-boot:run) against the Compose database.
+# Reads the same .env file as docker compose; DB_PASSWORD has no default on purpose.
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:${DB_PORT:5433}/${DB_NAME:pokedex}}
+    username: ${DB_USERNAME:pokedex}
+    password: ${DB_PASSWORD}
