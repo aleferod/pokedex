@@ -7,12 +7,17 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** platform foundation done (`bootstrap-project`): error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker and CI. The user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
+> **Status:** two changes are done.
+> - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
+> - `add-user-auth`: registration, JWT login and public vs protected routes.
+>
+> The Pokémon user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
 ## Contents
 
 - [Quick start](#quick-start)
 - [User stories and endpoints](#user-stories-and-endpoints)
+- [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
 - [Design patterns](#design-patterns)
@@ -40,6 +45,7 @@ docker compose up --build
 | OpenAPI document | http://localhost:8080/v3/api-docs |
 | Health | http://localhost:8080/actuator/health |
 
+- **Secrets:** `.env.example` ships working placeholders for `DB_PASSWORD` and `JWT_SECRET`, so the demo runs as is. Anywhere else, set real values; generate a signing secret with `openssl rand -base64 48`.
 - **Ports:** PostgreSQL is published on host port **5433** (`DB_PORT`), so it won't clash with a PostgreSQL you may already run on 5432. If port 8080 is taken, change `SERVER_PORT` in `.env`.
 - **Stop:** `docker compose down` keeps the data (named volume `pokedex-db-data`). `docker compose down -v` wipes it.
 - **Run the API on the host instead (optional):** start only the database with `docker compose up -d postgres`, then run `./mvnw spring-boot:run`. This needs JDK 21. The default `local` profile reads the same `.env` and connects to `localhost:5433`.
@@ -53,13 +59,49 @@ The full stack with the web app (`docker-compose.full.yml`) and the seeded demo 
 | Operations | `GET /actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness` | public | ✅ |
 | Operations | `GET /actuator/info` (name, version) | public | ✅ |
 | API docs | `GET /v3/api-docs`, `GET /swagger-ui.html` | public | ✅ |
-| Auth | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` | public / bearer | planned |
+| Auth | `POST /api/v1/auth/register` → 201 | public | ✅ |
+| Auth | `POST /api/v1/auth/login` → 200 with bearer token | public | ✅ |
+| Auth | `GET /api/v1/auth/me` | bearer | ✅ |
 | US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | planned |
 | US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | planned |
-| US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` | bearer | planned |
-| US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `GET/PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer (DELETE: `ADMIN`) | planned |
+| US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` | bearer (secured ✅) | planned |
+| US04 Local CRUD | `GET/POST /api/v1/local-pokemon`, `GET/PUT/PATCH/DELETE /api/v1/local-pokemon/{id}` | bearer; `DELETE` needs `ADMIN` (secured ✅) | planned |
 
 All other management endpoints (`/actuator/env`, `/beans`, `/heapdump`, `/shutdown`, …) are not exposed and return 404.
+
+## Authentication
+
+Stateless bearer tokens (JWT, HS256), issued by the API itself ([ADR-0002](docs/adr/0002-stateless-jwt-authentication.md)).
+
+```bash
+# 1. Register: every new account gets role USER; the role can't be chosen
+curl -s -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"username":"ash","email":"ash@pallet.town","password":"Pikachu@25"}'
+
+# 2. Log in: returns accessToken, tokenType, expiresAt and the account
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"ash","password":"Pikachu@25"}' | jq -r .accessToken)
+
+# 3. Call protected routes with the token
+curl -s localhost:8080/api/v1/auth/me -H "Authorization: Bearer $TOKEN"
+```
+
+**Account rules:**
+- **Usernames:** 3–30 letters, digits, `.`, `_` or `-`.
+- **Email:** a valid address.
+- **Case-insensitive:** both usernames and emails are case-insensitive and unique; a duplicate returns 409 naming the field.
+- **Passwords:** 8–72 characters, with upper case, lower case, a digit and a special character. Every broken rule is listed in `errors`.
+- **Storage:** passwords are stored only as BCrypt hashes.
+
+**Login failures:** they all return the same `401 Invalid username or password.`, and unknown usernames still cost one hash comparison, so neither the response nor its timing reveals which accounts exist.
+
+| Route | Who |
+|---|---|
+| `GET /api/v1/pokemon/**`, `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, Swagger/OpenAPI, health, info | anyone |
+| `/api/v1/local-pokemon/**`, `GET /api/v1/auth/me` | valid bearer token (401 otherwise, with `WWW-Authenticate: Bearer`) |
+| `DELETE /api/v1/local-pokemon/**` | role `ADMIN` (403 for `USER`) |
+
+Unknown routes still return 404. The demo accounts `admin / Admin@123` and `trainer / Trainer@123` arrive with `add-seed-data`.
 
 ## Error format
 
@@ -139,12 +181,15 @@ flowchart LR
 | Factory | `ProblemDetailFactory`: the single place that builds problem details | ✅ |
 | Chain of Responsibility | servlet filter chain: `CorrelationIdFilter` → `ProblemDetailCorsFilter` → DispatcherServlet | ✅ |
 | Specification | `ArchitectureRules`: named, reusable architecture rules | ✅ |
-| Value Object | `CorsProperties` (validates its invariants); `PokemonId`, `Weight` planned | ✅ / planned |
-| Repository | persistence ports + Spring Data adapters | planned |
+| Value Object | `Username`, `EmailAddress`, `UserId`, `PasswordHash`, `CorsProperties`, `JwtProperties`; `PokemonId`, `Weight` planned | ✅ |
+| Factory | `User.register` (always `USER`) / `User.restore` | ✅ |
+| Chain of Responsibility | `PasswordPolicy` → `PasswordRule` chain (length, character classes) | ✅ |
+| Repository | `UserRepositoryPort` ← `UserPersistenceAdapter` (Spring Data) | ✅ |
+| Adapter | `BCryptPasswordHasher`, `JwtTokenIssuer` behind application ports | ✅ |
 | Adapter / Anti-Corruption Layer | PokeAPI DTOs → domain mapper | planned |
 | Strategy | evolution-chain flattening | planned |
 | Decorator / Proxy | Spring Cache around the catalog port | planned |
-| DTO + Mapper | web and persistence mappers (MapStruct) | planned |
+| DTO + Mapper | `AuthWebMapper`, `UserPersistenceMapper` (MapStruct) | ✅ |
 
 ## Tech stack
 
@@ -153,13 +198,15 @@ flowchart LR
 | Java 21, Spring Boot 4.1 | Current supported Boot line; 3.5 is out of OSS support ([ADR-0006](docs/adr/0006-spring-boot-4.md)) |
 | Spring Web MVC + `ProblemDetail` | Standard RFC 7807 errors |
 | PostgreSQL 16 + Flyway | The schema is owned by versioned migrations; Hibernate runs `ddl-auto=validate` only |
+| Spring Security 7 OAuth2 resource server | Standard JWT verification and role mapping; no hand-written token parsing |
+| MapStruct | Mapping generated at compile time; an unmapped field fails the build |
 | springdoc-openapi | OpenAPI 3 document and Swagger UI generated from the code |
 | Actuator | Health, liveness/readiness probes and build info; nothing else is exposed |
 | JUnit 6, AssertJ, Mockito, ArchUnit, Testcontainers | Fast unit tests, real-database integration tests, architecture tests ([ADR-0004](docs/adr/0004-testcontainers-over-in-memory-databases.md)) |
 | Spotless (google-java-format), JaCoCo, Maven Enforcer | Formatting, coverage and dependency gates in every build |
 | Docker (multi-stage, layered, non-root) + Compose | One-command local stack; the host needs only Docker |
 
-Coming with later changes: Spring Security with JWT, Resilience4j, Caffeine, MapStruct and WireMock.
+Coming with later changes: Resilience4j, Caffeine and WireMock.
 
 ## Configuration
 
@@ -173,6 +220,9 @@ Everything that varies between environments comes from environment variables. `d
 | `DB_URL` | derived | Optional JDBC URL override for the local profile |
 | `SERVER_PORT` | `8080` | Host port of the API |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated exact origins allowed to call `/api/**`. Wildcards are rejected at startup. |
+| `JWT_SECRET` | **none (required)** | HMAC key that signs access tokens, at least 32 bytes. Startup fails naming it if it's missing or short. |
+| `JWT_TTL` | `PT1H` | Access-token lifetime (ISO-8601 duration) |
+| `BCRYPT_STRENGTH` | `10` | BCrypt cost factor |
 
 | Profile | When |
 |---|---|
@@ -199,9 +249,11 @@ Everything that varies between environments comes from environment variables. `d
 
 | Layer | Tooling | Examples |
 |---|---|---|
-| Unit | JUnit 6, AssertJ, Mockito | `CorrelationIdFilterTest`, `CorsPropertiesTest` |
-| Web slice | `@WebMvcTest` via [`@WebSliceTest`](src/test/java/com/ballastlane/pokedex/support/WebSliceTest.java) | `GlobalExceptionHandlerTest`, `CrossOriginTest` |
-| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) | `OperationalEndpointsIT`, `SchemaMigrationIT`, `HealthDatabaseDownIT` |
+| Unit (domain, use cases) | JUnit 6, AssertJ, Mockito | `PasswordPolicyTest`, `RegisterUserUseCaseTest`, `AuthenticateUserUseCaseTest` |
+| Unit (adapters, config) | JUnit 6, AssertJ | `JwtTokenIssuerTest`, `BCryptPasswordHasherTest`, `CorsPropertiesTest` |
+| Web slice | `@WebMvcTest` via [`@WebSliceTest`](src/test/java/com/ballastlane/pokedex/support/WebSliceTest.java), with real tokens from [`TestTokens`](src/test/java/com/ballastlane/pokedex/support/TestTokens.java) | `AuthControllerTest`, `AccessControlTest`, `InputAndDomainErrorsTest` |
+| Persistence (`*IT`) | `@DataJpaTest` + Testcontainers | `UserPersistenceAdapterIT` |
+| Integration (`*IT`, Failsafe) | `@SpringBootTest` + Testcontainers PostgreSQL 16 via [`@IntegrationTest`](src/test/java/com/ballastlane/pokedex/support/IntegrationTest.java) | `AuthFlowIT`, `ShortLivedTokenIT`, `OperationalEndpointsIT`, `SchemaMigrationIT` |
 | Architecture | ArchUnit | `ArchitectureTest`, `ArchitectureRulesSelfTest` |
 
 Test names follow `should_<expected>_when_<condition>`, with Given / When / Then bodies. Tests are written first: each change's pull request shows a failing `test:` commit before the `feat:` commit that makes it pass.
@@ -237,6 +289,7 @@ The process for each change:
 
 See [docs/adr](docs/adr/README.md). Written so far:
 - 0001: Clean/Hexagonal Architecture in one module, enforced by ArchUnit
+- 0002: Stateless JWT authentication issued by the API
 - 0004: Testcontainers instead of H2
 - 0005: OpenSpec
 - 0006: Spring Boot 4.1
@@ -246,7 +299,7 @@ See [docs/adr](docs/adr/README.md). Written so far:
 Each item is one OpenSpec change and one pull request:
 
 1. ✅ `bootstrap-project`: platform foundation
-2. `add-user-auth`: register/login (JWT), users table, public vs protected routes, roles
+2. ✅ `add-user-auth`: register/login (JWT), users table, public vs protected routes, roles
 3. `add-pokemon-catalog`: US01 paginated catalog with parallel detail fetching
 4. `add-pokemon-detail`: US02 stats, description, evolution chain
 5. `add-local-sync`: US03 import into PostgreSQL with proprietary fields
@@ -260,6 +313,7 @@ Each item is one OpenSpec change and one pull request:
 - **One module plus ArchUnit, not multi-module Maven.** Easier to read and review. The layering is enforced when tests run, not when code compiles. See ADR-0001.
 - **Empty `V1__baseline.sql`.** Tables arrive with the feature that needs them, so the history reads one capability per change.
 - **Squash merges.** `main` stays linear. The red/green TDD commits remain visible in each pull request.
+- **Auth limits:** HS256 shared secret, no refresh tokens or revocation, no login rate limiting. Each is mitigated and has a next step in ADR-0002.
 - **Future work:**
   - structured JSON logs and distributed tracing (Micrometer/OpenTelemetry)
   - a Redis cache for multi-instance deployments

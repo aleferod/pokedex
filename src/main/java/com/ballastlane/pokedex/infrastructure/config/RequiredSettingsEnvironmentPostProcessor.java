@@ -13,7 +13,8 @@ import org.springframework.core.env.ConfigurableEnvironment;
  */
 public class RequiredSettingsEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
-  static final List<String> REQUIRED_OUTSIDE_TESTS = List.of("spring.datasource.password");
+  static final List<String> REQUIRED_OUTSIDE_TESTS =
+      List.of("spring.datasource.password", "app.security.jwt.secret");
 
   @Override
   public void postProcessEnvironment(

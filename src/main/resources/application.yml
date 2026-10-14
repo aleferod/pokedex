@@ -16,6 +16,10 @@ spring:
     open-in-view: false
   flyway:
     locations: classpath:db/migration
+  jackson:
+    deserialization:
+      # Unknown JSON members are client errors (400 with the field named), never silently ignored.
+      fail-on-unknown-properties: true
 
 server:
   port: ${SERVER_PORT:8080}
@@ -47,6 +51,16 @@ logging:
     correlation: "[%X{correlationId:-}] "
 
 app:
+  security:
+    jwt:
+      # HMAC-SHA256 signing secret, at least 32 bytes. Required outside tests: no default on purpose.
+      secret: ${JWT_SECRET}
+      ttl: ${JWT_TTL:PT1H}
+      issuer: pokedex-api
+      # Tolerance for clock differences when checking exp/nbf.
+      clock-skew: PT30S
+    password:
+      bcrypt-strength: ${BCRYPT_STRENGTH:10}
   cors:
     # Comma-separated exact origins (no wildcards). Default: the Vite dev server of pokedex-web.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}

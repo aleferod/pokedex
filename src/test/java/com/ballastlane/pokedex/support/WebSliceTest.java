@@ -1,7 +1,10 @@
 package com.ballastlane.pokedex.support;
 
+import com.ballastlane.pokedex.adapter.in.web.error.ProblemDetailErrorController;
 import com.ballastlane.pokedex.adapter.in.web.error.ProblemDetailFactory;
 import com.ballastlane.pokedex.adapter.in.web.error.ProblemDetailWriter;
+import com.ballastlane.pokedex.infrastructure.security.CredentialsConfiguration;
+import com.ballastlane.pokedex.infrastructure.security.SecurityConfiguration;
 import com.ballastlane.pokedex.infrastructure.time.TimeConfiguration;
 import com.ballastlane.pokedex.infrastructure.web.CrossOriginConfiguration;
 import com.ballastlane.pokedex.infrastructure.web.WebFilterConfiguration;
@@ -30,11 +33,17 @@ import org.springframework.test.context.ActiveProfiles;
   CrossOriginConfiguration.class,
   ProblemDetailFactory.class,
   ProblemDetailWriter.class,
+  SecurityConfiguration.class,
+  CredentialsConfiguration.class,
   TimeConfiguration.class
 })
 public @interface WebSliceTest {
 
-  /** Controllers to include; empty means all {@code @Controller} beans. */
+  /**
+   * Controllers to include. Defaults to the error controller only, so each test names the
+   * controllers it exercises (and mocks only their use cases); probe controllers are added with
+   * {@code @Import}.
+   */
   @AliasFor(annotation = WebMvcTest.class, attribute = "controllers")
-  Class<?>[] controllers() default {};
+  Class<?>[] controllers() default {ProblemDetailErrorController.class};
 }

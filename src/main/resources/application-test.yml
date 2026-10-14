@@ -2,3 +2,12 @@
 spring:
   main:
     banner-mode: off
+
+app:
+  security:
+    jwt:
+      # Test-only value (>= 32 bytes); never used outside automated tests.
+      secret: test-only-signing-secret-do-not-use-in-any-real-environment
+    password:
+      # Minimum BCrypt cost keeps the suite fast; production uses 10+.
+      bcrypt-strength: 4

@@ -53,7 +53,7 @@ public class CrossOriginConfiguration {
 
   /** Right after the correlation id filter, so rejected requests still carry the id. */
   @Bean
-  FilterRegistrationBean<ProblemDetailCorsFilter> corsFilter(
+  FilterRegistrationBean<ProblemDetailCorsFilter> corsFilterRegistration(
       CorsConfigurationSource corsConfigurationSource,
       ProblemDetailFactory problems,
       ProblemDetailWriter writer) {

@@ -30,19 +30,28 @@ Responses never contain stack traces, exception names, SQL or configuration valu
 
 ## bad-request
 
-**400 Bad request.** The request is malformed: unreadable JSON, a parameter of the wrong type, a missing required parameter, or values that fail validation. When the problem is with specific fields, `errors` lists each field and why it was rejected.
+**400 Bad request.** The request is malformed or has invalid values. `errors` lists each offending field and why:
+- missing or invalid fields
+- values of the wrong JSON type (`"has the wrong type"`)
+- members the endpoint doesn't accept (`"is not an accepted field"`, for example sending `role` when registering)
+- password-policy violations: one `password` entry per broken rule
+
+A body that isn't JSON at all gets the detail `Malformed JSON request body.` and an empty `errors`.
 
 **Fix:** correct the request as described in `detail` and `errors`, then retry.
 
 ## unauthorized
 
-**401 Authentication required.** The endpoint is protected and the request has no valid bearer token, or the token has expired.
+**401 Authentication required.** One of these:
+- A protected endpoint was called without a bearer token. The detail says a token is required.
+- The token is invalid, tampered with, from another issuer, or expired. The detail says the token is invalid or has expired, and `WWW-Authenticate` contains `error="invalid_token"`.
+- `POST /api/v1/auth/login` got a wrong username or password. The detail is always `Invalid username or password.`, so it never reveals whether the account exists.
 
-**Fix:** log in with `POST /api/v1/auth/login` and send `Authorization: Bearer <token>`.
+**Fix:** log in with `POST /api/v1/auth/login` and send `Authorization: Bearer <accessToken>`. After the token's `expiresAt`, log in again.
 
 ## forbidden
 
-**403 Access denied.** You're authenticated, but your role isn't allowed to do this. For example, deleting a local Pokémon requires the `ADMIN` role.
+**403 Access denied.** You're authenticated, but your role isn't allowed to do this. For example, `DELETE` on `/api/v1/local-pokemon/**` requires the `ADMIN` role.
 
 **Fix:** use an account with the required role.
 
@@ -66,7 +75,7 @@ Responses never contain stack traces, exception names, SQL or configuration valu
 
 ## conflict
 
-**409 Conflict.** The request conflicts with the resource's current state. For example, the resource already exists (a duplicate username, email or Pokémon), or it was changed by someone else since you read it.
+**409 Conflict.** The request conflicts with the resource's current state. For example, the resource already exists (when registering, `errors` names the taken field, `username` or `email`, ignoring case), or it was changed by someone else since you read it.
 
 **Fix:** read the current state, then retry with up-to-date data.
 

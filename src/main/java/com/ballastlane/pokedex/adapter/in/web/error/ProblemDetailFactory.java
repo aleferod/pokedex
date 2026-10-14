@@ -52,10 +52,13 @@ public class ProblemDetailFactory {
     return complete(problem, ProblemType.forStatus(status), path, List.of());
   }
 
-  /** Completes a problem Spring MVC already built (status and detail set) with our members. */
+  /**
+   * Completes a problem Spring MVC already built (status and detail set) with our members, keeping
+   * any field errors a handler attached before.
+   */
   public ProblemDetail complete(ProblemDetail problem, String path) {
     ProblemType type = ProblemType.forStatus(problem.getStatus());
-    return complete(problem, type, path, List.of());
+    return complete(problem, type, path, existingErrors(problem));
   }
 
   private ProblemDetail complete(
@@ -71,6 +74,17 @@ public class ProblemDetailFactory {
     members.put(ERRORS, List.copyOf(errors));
     problem.setProperties(members);
     return problem;
+  }
+
+  private static List<ProblemFieldError> existingErrors(ProblemDetail problem) {
+    if (problem.getProperties() != null
+        && problem.getProperties().get(ERRORS) instanceof List<?> errors) {
+      return errors.stream()
+          .filter(ProblemFieldError.class::isInstance)
+          .map(ProblemFieldError.class::cast)
+          .toList();
+    }
+    return List.of();
   }
 
   private static URI toUri(String path) {

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ballastlane.pokedex.PokedexApplication;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -12,6 +13,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.env.StandardEnvironment;
 
@@ -79,6 +81,33 @@ class ProfileConfigurationTest {
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("DB_PASSWORD")
         .hasMessageContaining(".env.example");
+  }
+
+  @Test
+  void should_failStartupNamingTheVariable_when_dockerProfileLacksJwtSecret() {
+    // Given the database password but no token-signing secret
+    StandardEnvironment environment = new StandardEnvironment();
+    environment
+        .getPropertySources()
+        .remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+    environment
+        .getPropertySources()
+        .addFirst(
+            new MapPropertySource(
+                "only-db-password",
+                Map.of(
+                    "DB_PASSWORD", "placeholder",
+                    // fail fast instead of waiting for a database that does not exist here
+                    "spring.datasource.hikari.connection-timeout", "250")));
+    SpringApplicationBuilder application =
+        new SpringApplicationBuilder(PokedexApplication.class)
+            .environment(environment)
+            .web(WebApplicationType.NONE)
+            .profiles("docker")
+            .logStartupInfo(false);
+
+    // When / Then
+    assertThatThrownBy(application::run).hasMessageContaining("JWT_SECRET");
   }
 
   @ParameterizedTest
