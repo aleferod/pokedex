@@ -1,0 +1,86 @@
+schema: spec-driven
+
+# Project context: constraints every OpenSpec artifact and workflow must respect.
+context: |
+  Product
+  - pokedex-api: REST API for the Ballast Lane Java technical exercise. Wraps PokeAPI (https://pokeapi.co/api/v2)
+    for browsing (US01 paginated catalog, US02 detail view), keeps a local PostgreSQL replica of selected Pokemon
+    with proprietary fields (US03 sync), and exposes full CRUD over that replica (US04). An auxiliary auth API
+    (register/login, JWT) protects /api/v1/local-pokemon/**. A separate repo (pokedex-web, React) consumes it.
+
+  Tech stack
+  - Java 21, Spring Boot 4.1.x, Maven via the Maven Wrapper (./mvnw).
+  - Spring Web MVC, Bean Validation, Spring Data JPA, PostgreSQL 16, Flyway (schema owned by migrations only,
+    spring.jpa.hibernate.ddl-auto=validate).
+  - Spring Security 7, stateless JWT resource server; BCrypt password hashing.
+  - Spring RestClient for PokeAPI + Resilience4j (timeout, retry with backoff, circuit breaker).
+  - Spring Cache + Caffeine (TTL and max size from config); cache abstraction must stay swappable for Redis.
+  - springdoc-openapi (Swagger UI), Actuator health/info, MapStruct, Java records for DTOs and value objects.
+  - Docker (multi-stage image, docker compose with postgres:16-alpine), GitHub Actions CI.
+
+  Architecture rules (Clean / Hexagonal; enforced by ArchUnit, a violation fails the build)
+  - Base package com.ballastlane.pokedex with layers:
+    domain/ (entities, value objects, domain exceptions, domain services; NO Spring, NO JPA, NO Jackson),
+    application/ (one class per use case; ports in application.port.in and application.port.out),
+    adapter/in/web (controllers, request/response DTOs, web mappers, GlobalExceptionHandler),
+    adapter/out/pokeapi (PokeAPI client + DTOs + anti-corruption mapper, cache and resilience config),
+    adapter/out/persistence (JPA entities, Spring Data repositories, persistence mappers),
+    infrastructure/ (Spring configuration, security configuration, bean wiring).
+  - Dependency rule: adapter -> application -> domain. Never the reverse. application never imports adapter or
+    infrastructure. Adapters never import each other or infrastructure.
+  - Use cases are exposed as port.in interfaces; controllers depend on those interfaces only.
+  - Use cases depend on port.out interfaces (e.g. PokemonCatalogPort, LocalPokemonRepositoryPort,
+    UserRepositoryPort, PasswordHasherPort, TokenPort), never on concrete adapters.
+  - Patterns to apply and name in design.md: Ports & Adapters, Repository, Adapter/Anti-Corruption Layer (PokeAPI),
+    Strategy (evolution-chain flattening), Factory/Builder (domain objects), Decorator/Proxy (Spring Cache),
+    Template Method or Chain of Responsibility (validation), DTO + Mapper, Value Objects (PokemonId, Weight).
+
+  API conventions
+  - URI versioning under /api/v1. JSON only. Correct status codes (201 + Location on create, 204 on delete).
+  - Paginated responses use { content[], page, size, totalElements, totalPages }.
+  - Every error is an RFC 7807 ProblemDetail (application/problem+json) with type, title, status, detail, instance,
+    timestamp and errors[] (field-level list; empty when not applicable). Never leak stack traces or internals.
+  - Every response carries X-Correlation-Id; the id is in the logging MDC.
+  - Public: catalog, detail, auth endpoints, Swagger/OpenAPI, actuator health/info. Protected: /api/v1/local-pokemon/**.
+    DELETE on local Pokemon requires role ADMIN.
+  - Configuration comes from environment variables; Spring profiles: local, docker, test. Secrets never committed.
+
+  Coding conventions
+  - Constructor injection only (no field injection). Depend on interfaces. Small classes, no god services.
+  - Records for DTOs and value objects; value objects validate their invariants in the compact constructor.
+  - Conventional Commits (feat:, test:, fix:, docs:, chore:, refactor:). One feature branch per change
+    (change/<change-id>), PR via gh, squash merge after CI is green.
+  - Formatting enforced by Spotless (google-java-format); compiler runs with -Xlint:all -Werror.
+
+  Testing strategy (TDD: the failing test is committed before the implementation)
+  - Unit: domain and use cases with JUnit 5, Mockito, AssertJ.
+  - Web slice: @WebMvcTest for every endpoint (validation, status codes, ProblemDetail shape, security rules).
+  - Persistence: @DataJpaTest with Testcontainers PostgreSQL. H2 is not allowed.
+  - PokeAPI adapter: WireMock (success, 404, timeout, 5xx with retry and circuit breaker, cache hits via request counts).
+  - Integration: @SpringBootTest + Testcontainers for full flows (register -> login -> sync -> update -> delete).
+  - Architecture: ArchUnit.
+  - Test names: should_<expected>_when_<condition>, bodies structured Given / When / Then.
+  - JaCoCo enforces >= 85% line coverage on the domain and application packages.
+  - Everything builds and tests inside Docker (scripts/verify-in-docker.sh); CI runs ./mvnw -B verify.
+
+  Definition of done (checked before closing every change)
+  - openspec validate <change> --strict passes; all tasks ticked; change archived as the last commit of its PR.
+  - Tests written first and passing; coverage threshold met; ArchUnit green.
+  - No compiler warnings, no lint/format errors.
+  - Every new endpoint documented in OpenAPI and in the README endpoint table.
+  - docker compose up --build works from a clean clone; seeded data present.
+  - CI green; PR squash-merged; no secrets in git history (gitleaks scan clean).
+
+rules:
+  proposal:
+    - State what is explicitly out of scope.
+    - List the user story (US01-US04) or auxiliary requirement the change serves.
+  specs:
+    - Every requirement uses SHALL and has at least one "#### Scenario:" block in WHEN / THEN form.
+    - Cover error paths (400, 401, 403, 404, 409, 503 as relevant) with their own scenarios, not only the happy path.
+  design:
+    - Name the design patterns used and the classes or packages where they live.
+    - Record trade-offs and rejected alternatives.
+  tasks:
+    - Within each group, test tasks come before the implementation tasks they drive.
+    - End with a verification group (verify-in-docker, openspec validate --strict, docs/README/OpenAPI updated).
