@@ -1,0 +1,56 @@
+schema: spec-driven
+
+# Project context: constraints every OpenSpec artifact and workflow must respect.
+context: |
+  Product
+  - pokedex-web: the frontend for the Ballast Lane Java technical exercise. It consumes pokedex-api
+    (separate repo, Spring Boot) under /api/v1: public paginated catalog (US01) and detail view (US02),
+    plus protected management of locally replicated Pokemon (US03 sync, US04 CRUD) behind JWT login/register.
+
+  Tech stack
+  - React 19, TypeScript in strict mode, Vite, React Router.
+  - TanStack Query for all server state (caching, pagination, optimistic updates). No global store for server data.
+  - React Hook Form + Zod; Zod schemas mirror the backend validation rules (lengths, tag pattern/limits, required).
+  - Tailwind CSS, mobile-first. HTTP via a single API client with a JWT interceptor and centralized 401 handling.
+  - ESLint + Prettier. Vitest + React Testing Library + MSW. Playwright (optional) for E2E against docker compose.
+  - Docker: multi-stage build (node -> nginx:alpine) with SPA fallback and /api proxy to the backend service.
+
+  Structure (feature-based)
+  - src/app (router, providers, query client, layout), src/features/{auth,catalog,detail,local-pokemon},
+    src/shared (api client, UI components, hooks, types, error boundary, toasts).
+  - Features never import from each other's internals; shared code goes to src/shared.
+
+  UX rules
+  - Every data view has loading skeletons, empty states and error states with retry.
+  - Shareable state lives in the URL (page, search, filters).
+  - Accessible: semantic HTML, labelled controls, keyboard navigation, alt text, visible focus.
+  - Responsive from 360px to desktop.
+  - Zero browser console warnings or errors in dev and prod builds (no key warnings, no act() warnings, no 404 favicon).
+
+  Conventions
+  - Conventional Commits; one branch per change (change/<change-id>); PR via gh; squash merge after CI is green.
+  - Components are function components with typed props; no `any`; API types come from one shared module.
+
+  Testing strategy (TDD: failing test committed before the implementation)
+  - Component and hook tests with Vitest + RTL, API mocked with MSW at the network layer.
+  - Each feature covers the happy path plus 400, 401, 404 and 409 handling where the API can return them.
+  - Tests run inside Docker: docker run --rm -v "$PWD":/app -w /app node:22-alpine sh -c "npm ci && npm test".
+
+  Definition of done (checked before closing every change)
+  - openspec validate <change> --strict passes; all tasks ticked; change archived as the last commit of its PR.
+  - Tests written first and passing; lint, type-check and build clean.
+  - No browser console warnings in dev or prod builds.
+  - README updated; docker build works; CI green; PR squash-merged; no secrets in git history.
+
+rules:
+  proposal:
+    - State what is explicitly out of scope.
+    - List the user story (US01-US04) or auxiliary requirement the change serves.
+  specs:
+    - Every requirement uses SHALL and has at least one "#### Scenario:" block in WHEN / THEN form.
+    - Include loading, empty and error-state scenarios for every data view.
+  design:
+    - Record state-management and component-boundary decisions and trade-offs.
+  tasks:
+    - Within each group, test tasks come before the implementation tasks they drive.
+    - End with a verification group (lint, type-check, tests, build, console check, openspec validate --strict).
