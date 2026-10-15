@@ -28,6 +28,21 @@ export function configureApiClient(next: ApiClientConfig): void {
  * request rejects with its original `AbortError` so query libraries can ignore it.
  */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { body }: ApiResponse<T> = await apiResponse<T>(path, options);
+  return body;
+}
+
+/** An answer whose status means something (201 Created vs 200 OK), with its body. */
+export interface ApiResponse<T> {
+  status: number;
+  body: T;
+}
+
+/** Like {@link apiRequest}, with the status too. */
+export async function apiResponse<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<ApiResponse<T>> {
   const headers = new Headers({ Accept: 'application/json', ...options.headers });
   const token = config.getToken?.();
   if (token) {
@@ -60,10 +75,13 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     throw error;
   }
   if (response.status === 204) {
-    return undefined as T;
+    return { status: response.status, body: undefined as T };
   }
   const text = await response.text();
-  return (text.length > 0 ? JSON.parse(text) : undefined) as T;
+  return {
+    status: response.status,
+    body: (text.length > 0 ? JSON.parse(text) : undefined) as T,
+  };
 }
 
 function isAbort(error: unknown): boolean {

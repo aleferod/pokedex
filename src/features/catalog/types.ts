@@ -7,12 +7,3 @@ export interface CatalogEntry {
   weight: number;
   abilities: string[];
 }
-
-/** The API's paginated envelope (`page` is 0-based there). */
-export interface Page<T> {
-  content: T[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-}

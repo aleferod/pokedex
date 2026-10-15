@@ -7,7 +7,7 @@
 
 The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Ballast Lane Java technical exercise. It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
 
-> **Status:** `bootstrap-web`, `add-auth-ui`, `add-catalog-ui` and `add-detail-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, registration and sign-in with protected routes, the paginated catalog (US01) and the Pokémon detail page with stats and the evolution chain (US02). The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
+> **Status:** `bootstrap-web`, `add-auth-ui`, `add-catalog-ui`, `add-detail-ui` and `add-local-pokemon-management-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, registration and sign-in with protected routes, the paginated catalog (US01), the Pokémon detail page (US02), and the local Pokédex with sync, editing and optimistic concurrency (US03/US04). End-to-end tests and the full-stack Compose file come next; see [Roadmap](#roadmap).
 
 ## Contents
 
@@ -20,6 +20,7 @@ The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Bal
 - [Authentication](#authentication)
 - [Catalog](#catalog)
 - [Pokémon detail](#pokémon-detail)
+- [My Pokédex](#my-pokédex)
 - [Testing and quality gates](#testing-and-quality-gates)
 - [Docker](#docker)
 - [Spec-driven workflow](#spec-driven-workflow)
@@ -162,6 +163,23 @@ How it behaves:
 - **The way back:** "Back to the catalog" returns to the catalog page and size you came from, even after following the evolution chain. Opened directly, it goes to page 1.
 - **Focus:** after moving to a Pokémon inside the app (a card, a stage), focus goes to its name, so keyboard and screen-reader users start at the new content. In the main navigation, "Catalog" is then the current section (`aria-current="true"`), not the current page.
 
+## My Pokédex
+
+`/local` (US03/US04) is the local Pokédex: Pokémon copied from PokeAPI into pokedex-api's database, with your own localized names, region, habitat notes, tags and notes. It needs a session; visitors go to sign-in and come back to the same address.
+
+- **List:** a page at a time, with name and tag filters in the URL alongside the page and size (`/local?name=saur&tag=starter`), so a filtered view can be shared. Each tag on a record links to the list filtered by it.
+- **Sync from PokeAPI:**
+  - One Pokémon by name or number. Pikachu, for example, is imported (201) or refreshed (200), and the page says that your fields were kept.
+  - The first 1–20 catalog entries, with a summary such as "Synced 5 Pokémon: 0 imported, 5 updated."
+  - A record's page can re-sync it too.
+- **A record's page:** the PokeAPI data is marked read-only (types, measures, abilities, base stats, sync date); then come your fields, who added the record and when it was updated. Tags are added and removed in place, **optimistically**, and undone with an explanation if the API refuses.
+- **Create and edit:** the forms use the API's own rules and messages (lengths, the tag format, locales, at most 10 localized names). Every broken rule is listed at once, and the API's 400s land on the same fields, a localized name on its row.
+- **No lost updates:**
+  - Every write sends `If-Match` with the version you saw; the API's `ETag` is the record's `version` in quotes.
+  - The edit form keeps the version it loaded, even if the page refreshes the record in the background.
+  - When someone else saved first (409), your input stays and "Load the latest version" refills the form.
+- **Roles:** only administrators see "Delete". It asks for confirmation inline (focus on "Cancel"), sends `If-Match`, and returns to the list with a message. With the demo data, sign in as `admin / Admin@123` to delete, or as `trainer / Trainer@123` for everything else.
+
 ## Testing and quality gates
 
 ```bash
@@ -203,7 +221,7 @@ CI runs these jobs on every push and pull request:
 2. ✅ `add-auth-ui`: register, login, token handling, protected routes
 3. ✅ `add-catalog-ui`: the paginated catalog (US01)
 4. ✅ `add-detail-ui`: the detail view with stats and the evolution chain (US02)
-5. `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
+5. ✅ `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
 6. `add-e2e-and-polish`: Playwright end-to-end tests, the full-stack Compose file, screenshots
 
 ## License

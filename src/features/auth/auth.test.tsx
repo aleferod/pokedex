@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { apiRequest } from '@/shared/api';
+import { localApi } from '@/test/localApi';
 import { renderRoute } from '@/test/renderRoute';
 import { server } from '@/test/server';
 import { testSession } from '@/test/sessions';
@@ -120,6 +121,33 @@ describe('session and protected routes', () => {
     expect(screen.getByRole('link', { name: 'Register' })).toHaveAttribute('href', '/register');
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+  });
+
+  it('signs out of a real protected page and lands home, as a browser schedules it', async () => {
+    // Found in the browser: React Testing Library's act() flushes React Router's transition to
+    // "/" before the session is cleared, which hid that a browser renders the sign-out first, on
+    // the protected page, which then redirected to sign-in. Clicking outside act() schedules
+    // updates as a browser does.
+    saveSession(testSession());
+    localApi([]);
+    const { router } = renderRoute('/local');
+    await screen.findByText('Your local Pokédex is empty.');
+    const actEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean | undefined };
+    const previous = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      screen.getByRole('button', { name: 'Sign out' }).click();
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Register' })).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/');
+      });
+      expect(router.state.location.search).toBe('');
+    } finally {
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = previous;
+    }
   });
 
   it('offers sign-in and registration to visitors', async () => {

@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router';
+import { createMemoryRouter, type RouteObject } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 
 import { AppProviders } from '@/app/AppProviders';
 import { createQueryClient } from '@/app/queryClient';

@@ -1,13 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { render } from '@testing-library/react';
 
+import { saveSession } from '@/features/auth/session';
 import { problemResponse } from '@/test/authApi';
 import { renderRoute } from '@/test/renderRoute';
 import { server } from '@/test/server';
+import { testSession } from '@/test/sessions';
 
 import { App } from './App';
 
@@ -111,5 +113,61 @@ describe('application shell', () => {
     render(<App />);
 
     expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  });
+
+  describe('My Pokédex', () => {
+    const RECORD = '/local/0b6f8a52-7c1e-4d55-9a8e-3f1c2d4b5a69';
+
+    afterEach(() => {
+      sessionStorage.clear();
+    });
+
+    function localApi() {
+      server.use(
+        http.get('/api/v1/local-pokemon', () =>
+          HttpResponse.json({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 }),
+        ),
+        http.get('/api/v1/local-pokemon/:id', () =>
+          problemResponse(404, 'not-found', 'No local Pokémon with this id.'),
+        ),
+      );
+    }
+
+    it('is the current page on the list', async () => {
+      saveSession(testSession());
+      localApi();
+      renderRoute('/local');
+
+      const nav = await screen.findByRole('navigation', { name: 'Main' });
+      expect(within(nav).getByRole('link', { name: 'My Pokédex' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      expect(within(nav).getByRole('link', { name: 'Catalog' })).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('is the current section on a record', async () => {
+      saveSession(testSession());
+      localApi();
+      renderRoute(RECORD);
+
+      const nav = await screen.findByRole('navigation', { name: 'Main' });
+      expect(within(nav).getByRole('link', { name: 'My Pokédex' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+    });
+
+    it('sends a visitor to sign in and back', async () => {
+      const { router } = renderRoute('/local?tag=starter');
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/login');
+      });
+      expect(router.state.location.search).toBe('?next=%2Flocal%3Ftag%3Dstarter');
+      expect(screen.getByRole('link', { name: 'My Pokédex' })).toHaveAttribute('href', '/local');
+    });
   });
 });

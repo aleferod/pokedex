@@ -1,6 +1,6 @@
-import { apiRequest } from '@/shared/api';
+import { apiRequest, type Page } from '@/shared/api';
 
-import type { CatalogEntry, Page } from './types';
+import type { CatalogEntry } from './types';
 
 /** One catalog page; `page` is 1-based here and 0-based in the API. */
 export function fetchCatalogPage(

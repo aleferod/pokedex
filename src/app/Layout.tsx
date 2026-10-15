@@ -1,9 +1,11 @@
 import { useRef, type MouseEvent } from 'react';
-import { Link, NavLink, Outlet, useLocation, useMatch } from 'react-router';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 
 import { AuthNav } from '@/features/auth';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
+import { FlashMessage } from '@/shared/ui/FlashMessage';
 import { navLinkClass } from '@/shared/ui/navLinkClass';
+import { SectionNavLink } from '@/shared/ui/SectionNavLink';
 
 /**
  * The page frame: skip link, header with brand and main navigation, one main landmark, footer.
@@ -13,9 +15,6 @@ import { navLinkClass } from '@/shared/ui/navLinkClass';
 export function Layout() {
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
-  // "Catalog" is the current page only on /pokemon; on a Pokémon's page it is the current
-  // section (aria-current="true"), so the evolution stage being viewed is the one current page.
-  const onCatalogPage = useMatch('/pokemon') !== null;
 
   const skipToContent = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -44,13 +43,10 @@ export function Layout() {
                 </NavLink>
               </li>
               <li>
-                <NavLink
-                  to="/pokemon"
-                  aria-current={onCatalogPage ? 'page' : 'true'}
-                  className={navLinkClass}
-                >
-                  Catalog
-                </NavLink>
+                <SectionNavLink to="/pokemon">Catalog</SectionNavLink>
+              </li>
+              <li>
+                <SectionNavLink to="/local">My Pokédex</SectionNavLink>
               </li>
               <AuthNav />
             </ul>
@@ -63,6 +59,7 @@ export function Layout() {
         tabIndex={-1}
         className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 focus:outline-none"
       >
+        <FlashMessage />
         <ErrorBoundary key={location.pathname}>
           <Outlet />
         </ErrorBoundary>

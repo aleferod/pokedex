@@ -40,8 +40,10 @@ export function AuthNav() {
         <button
           type="button"
           onClick={() => {
-            // Leave first: signing out on a protected page would otherwise redirect to sign-in.
-            void Promise.resolve(navigate('/')).then(() => {
+            // Leave first, committed synchronously: React Router renders navigations in a
+            // transition, and a browser would render the sign-out before it, on the protected
+            // page, which would then redirect to sign-in.
+            void Promise.resolve(navigate('/', { flushSync: true })).then(() => {
               signOut();
             });
           }}

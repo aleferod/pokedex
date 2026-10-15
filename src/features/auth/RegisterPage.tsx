@@ -4,11 +4,16 @@ import { useForm } from 'react-hook-form';
 import { Link, Navigate, useSearchParams } from 'react-router';
 
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
-import { fieldMessages, FormAlert, SubmitButton, TextField } from '@/shared/ui/form';
+import {
+  fieldMessages,
+  FormAlert,
+  showServerErrors,
+  SubmitButton,
+  TextField,
+} from '@/shared/ui/form';
 
 import { safeNext } from './safeNext';
 import { registerSchema, type RegisterValues } from './schemas';
-import { showServerErrors } from './serverErrors';
 import { useAuth } from './useAuth';
 
 export function RegisterPage() {

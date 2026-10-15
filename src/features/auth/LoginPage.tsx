@@ -5,11 +5,16 @@ import { Link, Navigate, useSearchParams } from 'react-router';
 
 import { ApiError } from '@/shared/api';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
-import { fieldMessages, FormAlert, SubmitButton, TextField } from '@/shared/ui/form';
+import {
+  fieldMessages,
+  FormAlert,
+  showServerErrors,
+  SubmitButton,
+  TextField,
+} from '@/shared/ui/form';
 
 import { safeNext } from './safeNext';
 import { signInSchema, type SignInValues } from './schemas';
-import { showServerErrors } from './serverErrors';
 import { useAuth } from './useAuth';
 
 const WRONG_CREDENTIALS = 'Invalid username or password.';
