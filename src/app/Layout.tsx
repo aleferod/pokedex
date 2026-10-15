@@ -1,10 +1,9 @@
 import { useRef, type MouseEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 
+import { AuthNav } from '@/features/auth';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
-
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded px-2 py-1 font-medium hover:bg-red-700 ${isActive ? 'underline underline-offset-4' : ''}`;
+import { navLinkClass } from '@/shared/ui/navLinkClass';
 
 /**
  * The page frame: skip link, header with brand and main navigation, one main landmark, footer.
@@ -35,12 +34,13 @@ export function Layout() {
             Pokédex
           </Link>
           <nav aria-label="Main">
-            <ul className="flex flex-wrap gap-2">
+            <ul className="flex flex-wrap items-center gap-2">
               <li>
                 <NavLink to="/" end className={navLinkClass}>
                   Home
                 </NavLink>
               </li>
+              <AuthNav />
             </ul>
           </nav>
         </div>

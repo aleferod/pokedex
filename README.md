@@ -7,7 +7,7 @@
 
 The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Ballast Lane Java technical exercise. It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
 
-> **Status:** `bootstrap-web` is done: the application shell, the API client, quality gates, the Docker image and CI. The screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
+> **Status:** `bootstrap-web` and `add-auth-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, and registration, sign-in and protected routes. The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
 
 ## Contents
 
@@ -17,6 +17,7 @@ The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Bal
 - [Project structure](#project-structure)
 - [State management](#state-management)
 - [Talking to the API](#talking-to-the-api)
+- [Authentication](#authentication)
 - [Testing and quality gates](#testing-and-quality-gates)
 - [Docker](#docker)
 - [Spec-driven workflow](#spec-driven-workflow)
@@ -102,6 +103,28 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
 - **Network failures** become `status: 0` with `isNetworkError`. A cancelled request rejects with its original `AbortError`.
 - **Authentication plugs in** through `configureApiClient({ getToken, onUnauthorized })`, used by the auth feature.
 
+## Authentication
+
+| Page        | What it does                                                                    |
+| ----------- | ------------------------------------------------------------------------------- |
+| `/register` | Creates an account (always `USER`) and signs it in                              |
+| `/login`    | Signs in, then returns to `next` (only same-app paths; anything else goes home) |
+
+- **The rules mirror pokedex-api exactly,** in [`features/auth/schemas.ts`](src/features/auth/schemas.ts), so the form rejects what the API would and in the same words:
+  - username: 3–30 characters of letters, digits, `.`, `_` or `-`, any case
+  - email: the backend's syntax
+  - password: 8–72 characters, and at most 72 bytes, with upper case, lower case, a digit and a symbol. **Every** unmet rule is listed at once.
+- **The API stays the authority:** its 400 field errors and the field a 409 names ("is already taken") appear next to the inputs.
+- **A wrong sign-in** shows "Invalid username or password." and never says which part was wrong.
+- **The session** (token, expiry, account) lives in `sessionStorage`:
+  - It survives a reload in the same tab and is gone when the tab closes, so one tab is one session.
+  - An expired or malformed stored session is discarded.
+  - The app signs out when the token expires.
+  - **Why not `localStorage` or cookies:** injected script could read either web storage, so the real defence is having no XSS sinks (there's no `dangerouslySetInnerHTML`). `sessionStorage` keeps the exposure window to one tab, and the token lives at most an hour. HttpOnly cookies would need backend changes (cookie issuance and CSRF protection).
+- **Every request** carries `Authorization: Bearer …`. A 401 from any call ends the session. On a protected page the user lands on `/login?next=<that page>` with "Your session has expired. Please sign in again."
+- **Signing out** clears the session and every cached query, so no protected data outlives it.
+- **Demo accounts** come from pokedex-api's seed data: `trainer / Trainer@123` (USER) and `admin / Admin@123` (ADMIN, can delete).
+
 ## Testing and quality gates
 
 ```bash
@@ -111,6 +134,7 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
 - **Tooling:** Vitest, React Testing Library and **MSW** at the network layer. An unmocked request is an error, not a silent pass.
 - **Zero console warnings:** any `console.error` or `console.warn` during a test fails that test. That covers React key and `act()` warnings and library deprecations. [`consoleGuard.test.tsx`](src/test/consoleGuard.test.tsx) proves a missing `key` is caught.
 - **Coverage gate:** at least 85 % of lines, statements and functions, and 80 % of branches.
+- **About the browser console:** the app itself logs nothing. When the API answers an expected error, such as a wrong password's 401, Chrome adds its own "Failed to load resource" line for that request. That's the browser reporting an HTTP status, not an application warning, and it appears only in those error cases.
 - **Other gates:** strict TypeScript (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), ESLint with zero warnings, and a Prettier check.
 
 ## Docker
@@ -139,7 +163,7 @@ CI runs these jobs on every push and pull request:
 ## Roadmap
 
 1. ✅ `bootstrap-web`: shell, API client, gates, Docker, CI
-2. `add-auth-ui`: register, login, token handling, protected routes
+2. ✅ `add-auth-ui`: register, login, token handling, protected routes
 3. `add-catalog-ui`: the paginated catalog (US01)
 4. `add-detail-ui`: the detail view with stats and the evolution chain (US02)
 5. `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
