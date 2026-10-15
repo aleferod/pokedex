@@ -4,8 +4,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * A registered account. Created only through the factory methods: {@link #register} for new
- * accounts (always {@link Role#USER}) and {@link #restore} for accounts loaded from storage.
+ * A registered account. Created only through the factory methods: {@link #register} for
+ * self-registered accounts (always {@link Role#USER}), {@link #provision} for accounts an operator
+ * creates with a chosen role, and {@link #restore} for accounts loaded from storage.
  */
 public record User(
     UserId id,
@@ -30,6 +31,17 @@ public record User(
   public static User register(
       UserId id, Username username, EmailAddress email, PasswordHash passwordHash, Instant now) {
     return new User(id, username, email, passwordHash, Role.USER, now, now);
+  }
+
+  /** A new account an operator creates with a chosen role (never through public registration). */
+  public static User provision(
+      UserId id,
+      Username username,
+      EmailAddress email,
+      PasswordHash passwordHash,
+      Role role,
+      Instant now) {
+    return new User(id, username, email, passwordHash, role, now, now);
   }
 
   /** An account as it was stored. */

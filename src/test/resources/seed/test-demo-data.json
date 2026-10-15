@@ -1,0 +1,35 @@
+{
+  "createdBy": "admin",
+  "accounts": [
+    { "username": "admin", "email": "admin@pokedex.example", "password": "Admin@123", "role": "ADMIN" },
+    { "username": "trainer", "email": "trainer@pokedex.example", "password": "Trainer@123", "role": "USER" }
+  ],
+  "localPokemon": [
+    {
+      "pokeapiId": 1,
+      "localizedNames": { "ja": "フシギダネ", "fr": "Bulbizarre", "de": "Bisasam" },
+      "region": "Kanto",
+      "habitatNotes": "Grassland: sunny meadows south of Pallet Town.",
+      "internalTags": ["starter", "grass", "kanto"],
+      "notes": "Grass-type starter offered by Professor Oak."
+    },
+    {
+      "pokeapiId": 2,
+      "localizedNames": { "ja": "フシギソウ", "fr": "Herbizarre", "de": "Bisaknosp" },
+      "region": "Kanto",
+      "internalTags": ["grass", "kanto", "starter-line"]
+    },
+    {
+      "pokeapiId": 3,
+      "localizedNames": { "ja": "フシギバナ", "fr": "Florizarre", "de": "Bisaflor" },
+      "region": "Kanto",
+      "internalTags": ["grass", "kanto", "starter-line", "final-evolution"]
+    },
+    {
+      "pokeapiId": 25,
+      "localizedNames": { "ja": "ピカチュウ", "fr": "Pikachu", "de": "Pikachu" },
+      "region": "Kanto",
+      "internalTags": ["electric", "kanto", "mascot"]
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "createdBy": "admin",
+  "accounts": [
+    { "username": "admin", "email": "admin@pokedex.example", "password": "Admin@123", "role": "ADMIN" },
+    { "username": "trainer", "email": "trainer@pokedex.example", "password": "Trainer@123", "role": "USER" }
+  ],
+  "localPokemon": [
+    {
+      "pokeapiId": 1,
+      "localizedNames": { "ja": "フシギダネ", "fr": "Bulbizarre", "de": "Bisasam" },
+      "region": "Kanto",
+      "habitatNotes": "Grassland: sunny meadows south of Pallet Town.",
+      "internalTags": ["starter", "grass", "kanto"],
+      "notes": "Grass-type starter offered by Professor Oak."
+    },
+    {
+      "pokeapiId": 2,
+      "localizedNames": { "ja": "フシギソウ", "fr": "Herbizarre", "de": "Bisaknosp" },
+      "region": "Kanto",
+      "habitatNotes": "Grassland.",
+      "internalTags": ["grass", "kanto", "starter-line"],
+      "notes": "Evolves from Bulbasaur at level 16."
+    },
+    {
+      "pokeapiId": 3,
+      "localizedNames": { "ja": "フシギバナ", "fr": "Florizarre", "de": "Bisaflor" },
+      "region": "Kanto",
+      "habitatNotes": "Grassland.",
+      "internalTags": ["grass", "kanto", "starter-line", "final-evolution"],
+      "notes": "Final form of the Bulbasaur line (Ivysaur at level 32)."
+    },
+    {
+      "pokeapiId": 4,
+      "localizedNames": { "ja": "ヒトカゲ", "fr": "Salamèche", "de": "Glumanda" },
+      "region": "Kanto",
+      "habitatNotes": "Mountain: warm, rocky slopes.",
+      "internalTags": ["starter", "fire", "kanto"],
+      "notes": "Fire-type starter offered by Professor Oak."
+    },
+    {
+      "pokeapiId": 5,
+      "localizedNames": { "ja": "リザード", "fr": "Reptincel", "de": "Glutexo" },
+      "region": "Kanto",
+      "habitatNotes": "Mountain.",
+      "internalTags": ["fire", "kanto", "starter-line"],
+      "notes": "Evolves from Charmander at level 16."
+    },
+    {
+      "pokeapiId": 6,
+      "localizedNames": { "ja": "リザードン", "fr": "Dracaufeu", "de": "Glurak" },
+      "region": "Kanto",
+      "habitatNotes": "Mountain.",
+      "internalTags": ["fire", "kanto", "starter-line", "final-evolution"],
+      "notes": "Final form of the Charmander line (Charmeleon at level 36)."
+    },
+    {
+      "pokeapiId": 7,
+      "localizedNames": { "ja": "ゼニガメ", "fr": "Carapuce", "de": "Schiggy" },
+      "region": "Kanto",
+      "habitatNotes": "Water's edge: ponds and riverbanks.",
+      "internalTags": ["starter", "water", "kanto"],
+      "notes": "Water-type starter offered by Professor Oak."
+    },
+    {
+      "pokeapiId": 8,
+      "localizedNames": { "ja": "カメール", "fr": "Carabaffe", "de": "Schillok" },
+      "region": "Kanto",
+      "habitatNotes": "Water's edge.",
+      "internalTags": ["water", "kanto", "starter-line"],
+      "notes": "Evolves from Squirtle at level 16."
+    },
+    {
+      "pokeapiId": 9,
+      "localizedNames": { "ja": "カメックス", "fr": "Tortank", "de": "Turtok" },
+      "region": "Kanto",
+      "habitatNotes": "Water's edge.",
+      "internalTags": ["water", "kanto", "starter-line", "final-evolution"],
+      "notes": "Final form of the Squirtle line (Wartortle at level 36)."
+    },
+    {
+      "pokeapiId": 25,
+      "localizedNames": { "ja": "ピカチュウ", "fr": "Pikachu", "de": "Pikachu" },
+      "region": "Kanto",
+      "habitatNotes": "Forest: Viridian Forest.",
+      "internalTags": ["electric", "kanto", "mascot"],
+      "notes": "The series mascot; evolves into Raichu with a Thunder Stone."
+    }
+  ]
+}

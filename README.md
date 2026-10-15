@@ -7,7 +7,7 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** seven changes are done.
+> **Status:** eight changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
@@ -15,12 +15,14 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 > - `add-local-sync`: US03, the local replica in PostgreSQL with proprietary fields.
 > - `add-local-crud`: US04, listing, creating, editing and deleting local records with ETags and optimistic locking.
 > - `add-caching-resilience`: a Caffeine cache in front of PokeAPI, plus retries and a circuit breaker on every PokeAPI request.
+> - `add-seed-data`: demo accounts and ten local Pokémon, created at startup when demo data is enabled.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Demo data](#demo-data)
 - [User stories and endpoints](#user-stories-and-endpoints)
 - [Catalog (US01)](#catalog-us01)
 - [Detail view (US02)](#detail-view-us02)
@@ -55,12 +57,34 @@ docker compose up --build
 | OpenAPI document | http://localhost:8080/v3/api-docs |
 | Health | http://localhost:8080/actuator/health |
 
+- **Ready to try:** the stack seeds two demo accounts and ten local Pokémon, as described in [Demo data](#demo-data). Log in as `trainer` / `Trainer@123` to browse and edit, or as `admin` / `Admin@123` to delete.
 - **Secrets:** `.env.example` ships working placeholders for `DB_PASSWORD` and `JWT_SECRET`, so the demo runs as is. Anywhere else, set real values; generate a signing secret with `openssl rand -base64 48`.
 - **Ports:** PostgreSQL is published on host port **5433** (`DB_PORT`), so it won't clash with a PostgreSQL you may already run on 5432. If port 8080 is taken, change `SERVER_PORT` in `.env`.
 - **Stop:** `docker compose down` keeps the data (named volume `pokedex-db-data`). `docker compose down -v` wipes it.
 - **Run the API on the host instead (optional):** start only the database with `docker compose up -d postgres`, then run `./mvnw spring-boot:run`. This needs JDK 21. The default `local` profile reads the same `.env` and connects to `localhost:5433`.
 
-The full stack with the web app (`docker-compose.full.yml`) and the seeded demo users arrive with the later changes listed in the [Roadmap](#roadmap).
+The full stack with the web app (`docker-compose.full.yml`) arrives with the frontend changes listed in the [Roadmap](#roadmap).
+
+## Demo data
+
+With `SEED_DEMO_DATA=true` (the default in `.env.example` and Compose), the service makes sure this data exists every time it starts:
+
+| Account | Password | Role | Can |
+|---|---|---|---|
+| `admin` | `Admin@123` | `ADMIN` | everything, including `DELETE /api/v1/local-pokemon/{id}` |
+| `trainer` | `Trainer@123` | `USER` | browse, sync, create and edit local records |
+
+**Local Pokémon:** the Kanto starter lines (#1–#9) and Pikachu (#25).
+- Their upstream fields come fresh from PokeAPI.
+- Their proprietary fields come from [`seed/demo-data.json`](src/main/resources/seed/demo-data.json): Japanese, French and German names taken from PokeAPI, the region `Kanto`, a habitat note, and tags such as `starter`, `grass`, `fire`, `water`, `final-evolution` and `mascot`.
+- They're recorded as created by `admin`. Try `GET /api/v1/local-pokemon?tag=starter`.
+
+**How seeding behaves:**
+- **Same rules as the API:** it goes through the regular use cases, so the password policy, BCrypt hashing, domain validation and PokeAPI reads all apply. Nothing is written to the database by hand.
+- **Idempotent:** existing accounts and records are kept as they are, so a restart neither duplicates nor overwrites your edits. Delete a record, and the next start brings it back.
+- **Tolerant:** if PokeAPI is down, the accounts are still created, and each missing Pokémon is logged and created on a later start. The service starts normally either way. Readiness waits for seeding, so a healthy container already has its data.
+
+> **Never enable demo data on a public deployment.** The passwords above are public. Seeding is off unless `SEED_DEMO_DATA=true`, and the service logs a warning whenever it's on.
 
 ## User stories and endpoints
 
@@ -224,7 +248,7 @@ The schema is owned by Flyway (`V1` baseline, `V2` users, `V3` local replica), a
 
 ## Managing local records (US04)
 
-Every authenticated user can list, create and edit local records. Only an `ADMIN` can delete them (registration always creates a `USER`; the demo admin arrives with the seed data).
+Every authenticated user can list, create and edit local records. Only an `ADMIN` can delete them. Registration always creates a `USER`; use the [demo](#demo-data) `admin` account.
 
 ```bash
 # Create: the upstream fields come from PokeAPI, the proprietary ones from you
@@ -347,7 +371,7 @@ curl -s localhost:8080/api/v1/auth/me -H "Authorization: Bearer $TOKEN"
 | `/api/v1/local-pokemon/**`, `GET /api/v1/auth/me` | valid bearer token (401 otherwise, with `WWW-Authenticate: Bearer`) |
 | `DELETE /api/v1/local-pokemon/**` | role `ADMIN` (403 for `USER`) |
 
-Unknown routes still return 404. The demo accounts `admin / Admin@123` and `trainer / Trainer@123` arrive with `add-seed-data`.
+Unknown routes still return 404. The [demo accounts](#demo-data) `admin / Admin@123` and `trainer / Trainer@123` are ready when demo data is enabled.
 
 ## Error format
 
@@ -481,6 +505,7 @@ Everything that varies between environments comes from environment variables. `d
 | `SERVER_PORT` | `8080` | Host port of the API |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated exact origins allowed to call `/api/**`. Wildcards are rejected at startup. |
 | `POKEAPI_BASE_URL` | `https://pokeapi.co/api/v2` | Upstream catalog. Timeouts (2 s connect, 5 s read), the concurrency cap (8), retries (`app.pokeapi.retry.*`) and the circuit breaker (`app.pokeapi.circuit-breaker.*`) are in `application.yml`. |
+| `SEED_DEMO_DATA` | `false` (`true` in `.env.example` and Compose) | Seed the [demo data](#demo-data) at startup. The file is `app.seed.location`. |
 | `CATALOG_CACHE_TTL` | `PT1H` | How long catalog pages and details are reused (ISO-8601). The size limit is `app.catalog-cache.max-entries` (2000 per cache). |
 | `JWT_SECRET` | **none (required)** | HMAC key that signs access tokens, at least 32 bytes. Startup fails naming it if it's missing or short. |
 | `JWT_TTL` | `PT1H` | Access-token lifetime (ISO-8601 duration) |
@@ -569,7 +594,7 @@ Each item is one OpenSpec change and one pull request:
 5. ✅ `add-local-sync`: US03 import into PostgreSQL with proprietary fields
 6. ✅ `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
 7. ✅ `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
-8. `add-seed-data`: demo users and about 10 local Pokémon
+8. ✅ `add-seed-data`: demo users and 10 local Pokémon
 9. `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
 
 ## Trade-offs and future improvements
@@ -581,6 +606,7 @@ Each item is one OpenSpec change and one pull request:
 - **Native SQL for the local list.** The tag filter uses PostgreSQL array containment so the GIN index serves it. That ties the query to PostgreSQL, which is the only database, and Testcontainers runs the real one. `name` matches the PokeAPI name only; searching localized names is future work.
 - **In-process cache.** Each instance has its own cache, and catalog data can be up to one TTL old (the local replica always reads fresh). A shared Redis cache behind the same Decorator is the next step (ADR-0003).
 - **Retries add latency on failure.** That's at most about 0.6 s, and only for fast-failing errors; timeouts aren't retried. The JDK HTTP client may also replay a GET once by itself when a connection drops.
+- **Demo data through the use cases, not SQL.** Seeding needs PokeAPI and a few seconds at startup, but it never puts known passwords into a database that didn't ask for them, and it never copies upstream data by hand.
 - **Auth limits:** HS256 shared secret, no refresh tokens or revocation, no login rate limiting. Each is mitigated and has a next step in ADR-0002.
 - **Future work:**
   - structured JSON logs and distributed tracing (Micrometer/OpenTelemetry)

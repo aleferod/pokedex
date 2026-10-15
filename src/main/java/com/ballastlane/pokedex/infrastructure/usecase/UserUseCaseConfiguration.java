@@ -2,12 +2,14 @@ package com.ballastlane.pokedex.infrastructure.usecase;
 
 import com.ballastlane.pokedex.application.port.in.user.AuthenticateUser;
 import com.ballastlane.pokedex.application.port.in.user.GetCurrentUser;
+import com.ballastlane.pokedex.application.port.in.user.ProvisionUser;
 import com.ballastlane.pokedex.application.port.in.user.RegisterUser;
 import com.ballastlane.pokedex.application.port.out.user.PasswordHasherPort;
 import com.ballastlane.pokedex.application.port.out.user.TokenPort;
 import com.ballastlane.pokedex.application.port.out.user.UserRepositoryPort;
 import com.ballastlane.pokedex.application.usecase.user.AuthenticateUserUseCase;
 import com.ballastlane.pokedex.application.usecase.user.GetCurrentUserUseCase;
+import com.ballastlane.pokedex.application.usecase.user.ProvisionUserUseCase;
 import com.ballastlane.pokedex.application.usecase.user.RegisterUserUseCase;
 import com.ballastlane.pokedex.domain.user.password.PasswordPolicy;
 import java.time.Clock;
@@ -24,6 +26,11 @@ public class UserUseCaseConfiguration {
   @Bean
   RegisterUser registerUser(UserRepositoryPort users, PasswordHasherPort hasher, Clock clock) {
     return new RegisterUserUseCase(users, hasher, PasswordPolicy.standard(), clock);
+  }
+
+  @Bean
+  ProvisionUser provisionUser(UserRepositoryPort users, PasswordHasherPort hasher, Clock clock) {
+    return new ProvisionUserUseCase(users, hasher, PasswordPolicy.standard(), clock);
   }
 
   @Bean

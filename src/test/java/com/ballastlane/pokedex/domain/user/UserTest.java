@@ -29,6 +29,22 @@ class UserTest {
   }
 
   @Test
+  void should_keepTheChosenRole_when_provisionedByAnOperator() {
+    User admin =
+        User.provision(
+            UserId.random(),
+            new Username("admin"),
+            new EmailAddress("admin@pokedex.example"),
+            HASH,
+            Role.ADMIN,
+            NOW);
+
+    assertThat(admin.role()).isEqualTo(Role.ADMIN);
+    assertThat(admin.createdAt()).isEqualTo(NOW);
+    assertThat(admin.updatedAt()).isEqualTo(NOW);
+  }
+
+  @Test
   void should_keepEveryField_when_restoredFromStorage() {
     // When
     User user =
