@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Same origin in development as in production: /api is proxied to the backend.
 const apiTarget = process.env.VITE_DEV_API_TARGET ?? 'http://localhost:8080';
@@ -20,6 +20,8 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true },
   test: {
     environment: 'jsdom',
+    // End-to-end journeys run in Playwright against the full stack (scripts/e2e.sh).
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
     coverage: {

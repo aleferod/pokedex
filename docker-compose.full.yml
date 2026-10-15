@@ -1,0 +1,59 @@
+# The whole product: PostgreSQL 16 + pokedex-api + this web app, with the demo data.
+#   cp .env.example .env && docker compose -f docker-compose.full.yml up --build
+# App: http://localhost:${WEB_PORT:-8000}   Swagger UI: http://localhost:${API_PORT:-8080}/swagger-ui.html
+# pokedex-api is built from its GitHub repository (main); set API_CONTEXT=../pokedex-api in .env to
+# build a local checkout instead. The web app reaches the API only through its /api proxy.
+name: pokedex-full
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-pokedex}
+      POSTGRES_USER: ${DB_USERNAME:-pokedex}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set - run cp .env.example .env}
+    volumes:
+      - pokedex-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build: ${API_CONTEXT:-https://github.com/aleferod/pokedex-api.git#main}
+    image: pokedex-api:full
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-pokedex}
+      DB_USERNAME: ${DB_USERNAME:-pokedex}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set - run cp .env.example .env}
+      # Same-origin through the web app's proxy; listed for direct calls from the app's origin.
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-8000}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - run cp .env.example .env}
+      JWT_TTL: ${JWT_TTL:-PT1H}
+      POKEAPI_BASE_URL: ${POKEAPI_BASE_URL:-https://pokeapi.co/api/v2}
+      CATALOG_CACHE_TTL: ${CATALOG_CACHE_TTL:-PT1H}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - '${API_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: pokedex-web:full
+    environment:
+      API_UPSTREAM: http://api:8080
+    ports:
+      - '${WEB_PORT:-8000}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pokedex-db-data:
