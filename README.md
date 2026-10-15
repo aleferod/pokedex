@@ -7,7 +7,7 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** eight changes are done.
+> **Status:** all nine backend changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
@@ -16,6 +16,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 > - `add-local-crud`: US04, listing, creating, editing and deleting local records with ETags and optimistic locking.
 > - `add-caching-resilience`: a Caffeine cache in front of PokeAPI, plus retries and a circuit breaker on every PokeAPI request.
 > - `add-seed-data`: demo accounts and ten local Pokémon, created at startup when demo data is enabled.
+> - `add-genai-task-api-doc`: the GenAI exercise ([docs/GENAI.md](docs/GENAI.md)), with a generated Task API sample that CI builds and tests.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
@@ -38,6 +39,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [Testing and quality gates](#testing-and-quality-gates)
 - [Spec-driven workflow (OpenSpec)](#spec-driven-workflow-openspec)
 - [Architecture decisions](#architecture-decisions)
+- [GenAI exercise and AI use](#genai-exercise-and-ai-use)
 - [Roadmap](#roadmap)
 - [Trade-offs and future improvements](#trade-offs-and-future-improvements)
 
@@ -583,6 +585,14 @@ See [docs/adr](docs/adr/README.md). Written so far:
 - 0005: OpenSpec
 - 0006: Spring Boot 4.1
 
+## GenAI exercise and AI use
+
+[docs/GENAI.md](docs/GENAI.md) contains:
+- the exact prompt for generating a Task Management REST API
+- the generated code, in [docs/genai-sample/](docs/genai-sample/): a standalone project that CI builds and tests
+- how that output was validated, with twelve corrections (five just to make it build and run)
+- an honest account of how this API was built with an AI pair: the OpenSpec guardrails, and the real AI mistakes caught along the way
+
 ## Roadmap
 
 Each item is one OpenSpec change and one pull request:
@@ -595,7 +605,7 @@ Each item is one OpenSpec change and one pull request:
 6. ✅ `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
 7. ✅ `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. ✅ `add-seed-data`: demo users and 10 local Pokémon
-9. `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
+9. ✅ `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
 
 ## Trade-offs and future improvements
 

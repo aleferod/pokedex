@@ -83,3 +83,10 @@ Every push to `main` and every pull request SHALL trigger a pipeline that:
 #### Scenario: Status badge
 - **WHEN** someone views the repository README
 - **THEN** it shows a badge with the pipeline's latest status on `main`
+
+### Requirement: GenAI sample verified in CI
+Continuous integration SHALL build the GenAI sample in `docs/genai-sample/` with its own `pom.xml` and run its tests on every push and pull request, as a job separate from the Pokédex build.
+
+#### Scenario: A change breaks the sample
+- **WHEN** a commit breaks compilation or a test of the GenAI sample
+- **THEN** the CI job for the sample fails

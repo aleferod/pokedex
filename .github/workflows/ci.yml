@@ -49,6 +49,19 @@ jobs:
             target/failsafe-reports/
           if-no-files-found: ignore
 
+  genai-sample:
+    name: GenAI sample
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Verify the generated Task API (docs/genai-sample, its own pom.xml, Testcontainers)
+        run: ./mvnw -B -ntp -f docs/genai-sample/pom.xml verify
+
   openspec:
     name: Validate specs
     runs-on: ubuntu-latest
