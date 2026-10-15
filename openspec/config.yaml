@@ -34,7 +34,7 @@ context: |
   Testing strategy (TDD: failing test committed before the implementation)
   - Component and hook tests with Vitest + RTL, API mocked with MSW at the network layer.
   - Each feature covers the happy path plus 400, 401, 404 and 409 handling where the API can return them.
-  - Tests run inside Docker: docker run --rm -v "$PWD":/app -w /app node:22-alpine sh -c "npm ci && npm test".
+  - Tests run inside Docker (Node 24 LTS): ./scripts/npm-in-docker.sh ci, then ./scripts/npm-in-docker.sh test.
 
   Definition of done (checked before closing every change)
   - openspec validate <change> --strict passes; all tasks ticked; change archived as the last commit of its PR.

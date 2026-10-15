@@ -1,0 +1,14 @@
+# Only the sources the build needs go to the Docker daemon.
+.git
+.github
+.claude
+openspec
+node_modules
+dist
+coverage
+playwright-report
+test-results
+*.md
+.env
+.env.*
+!.env.example

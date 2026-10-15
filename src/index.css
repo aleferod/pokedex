@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+@layer base {
+  /* Visible focus for keyboard users on every interactive element. */
+  :focus-visible {
+    outline: 3px solid var(--color-amber-400);
+    outline-offset: 2px;
+  }
+}
