@@ -7,7 +7,7 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** all nine backend changes are done.
+> **Status:** complete. The nine backend changes below are done, and so is the frontend, [pokedex-web](https://github.com/aleferod/pokedex-web), which also runs **the whole product in one command** (see [Quick start](#quick-start)). [docs/PRESENTATION.md](docs/PRESENTATION.md) is the guide for the presentation and code review.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
@@ -18,7 +18,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 > - `add-seed-data`: demo accounts and ten local Pokémon, created at startup when demo data is enabled.
 > - `add-genai-task-api-doc`: the GenAI exercise ([docs/GENAI.md](docs/GENAI.md)), with a generated Task API sample that CI builds and tests.
 >
-> The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
+> See [Roadmap](#roadmap).
 
 ## Contents
 
@@ -42,6 +42,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [GenAI exercise and AI use](#genai-exercise-and-ai-use)
 - [Roadmap](#roadmap)
 - [Trade-offs and future improvements](#trade-offs-and-future-improvements)
+- [Presentation and code review](docs/PRESENTATION.md)
 
 ## Quick start
 
@@ -65,7 +66,13 @@ docker compose up --build
 - **Stop:** `docker compose down` keeps the data (named volume `pokedex-db-data`). `docker compose down -v` wipes it.
 - **Run the API on the host instead (optional):** start only the database with `docker compose up -d postgres`, then run `./mvnw spring-boot:run`. This needs JDK 21. The default `local` profile reads the same `.env` and connects to `localhost:5433`.
 
-The full stack with the web app (`docker-compose.full.yml`) arrives with the frontend changes listed in the [Roadmap](#roadmap).
+**The whole product (database, this API and the web app) in one command**, from a clone of [pokedex-web](https://github.com/aleferod/pokedex-web):
+
+```bash
+cp .env.example .env && docker compose -f docker-compose.full.yml up --build
+```
+
+The app opens at <http://localhost:8000>, and Swagger UI stays at <http://localhost:8080/swagger-ui.html>. That Compose file builds this API from this repository's `main`; the details are in [pokedex-web's README](https://github.com/aleferod/pokedex-web#run-the-whole-product).
 
 ## Demo data
 
@@ -606,6 +613,7 @@ Each item is one OpenSpec change and one pull request:
 7. ✅ `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. ✅ `add-seed-data`: demo users and 10 local Pokémon
 9. ✅ `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
+10. ✅ `add-presentation-doc`: the presentation and code-review guide ([`docs/PRESENTATION.md`](docs/PRESENTATION.md)), and the full stack from pokedex-web in the quick start
 
 ## Trade-offs and future improvements
 

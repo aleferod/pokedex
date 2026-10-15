@@ -211,7 +211,7 @@ The whole project was built with an AI pair (Claude Code), with me in charge of 
   - a task list with a "Verify:" line per task
   - spec deltas whose requirements have WHEN/THEN scenarios
 
-  `openspec validate --strict` gated each proposal and ran in CI. The archive step, the last commit of each PR, merged the deltas into [`openspec/specs/`](../openspec/specs): 17 capabilities once this change is archived. When implementation showed a spec or design was wrong, the document was corrected in the same PR, as the examples below show.
+  `openspec validate --strict` gated each proposal and ran in CI. The archive step, the last commit of each PR, merged the deltas into [`openspec/specs/`](../openspec/specs): 18 capabilities here, plus 8 in [pokedex-web](https://github.com/aleferod/pokedex-web/tree/main/openspec/specs). When implementation showed a spec or design was wrong, the document was corrected in the same PR, as the examples below show.
 - **Test first, and red for the right reason.** Each task pair was a failing `test:` commit (red on assertions, against stubs) and then a `feat:` commit. Every test that passed while still red was inspected, which caught several vacuous tests. Acceptance tests written after the code were mutation-checked: removing `@BatchSize`, the cache Decorator or the retries made them fail.
 - **Machine checks over opinions.**
   - `-Werror`, Spotless and JaCoCo (domain and application coverage ≥ 85 %, actually 100 %)
@@ -220,6 +220,7 @@ The whole project was built with an AI pair (Claude Code), with me in charge of 
   - gitleaks
 - **Docker-only verification.** The whole build ran in containers, as on CI.
 - **Checks outside the test suite.** Every change was also checked from a fresh clone with `docker compose up --build` against the real PokeAPI. That run caught things the test suite couldn't, such as the `.gitignore` bug below.
+- **A real browser, then end-to-end tests.** Each frontend change was checked by hand in a real browser against a real backend. Those checks found bugs that jsdom couldn't show, such as a sign-out race and a misleading `aria-current`. The last change turned them into Playwright journeys with axe, run against a fresh full stack in CI ([pokedex-web e2e](https://github.com/aleferod/pokedex-web/tree/main/e2e)).
 - **Human checkpoints.** The AI had to stop and ask before anything irreversible or out of scope. Examples:
   - **Spring Boot 4.1:** chosen over the prompt's 3.x because 3.5's open-source support had ended; I approved it (ADR-0006).
   - **409 vs 412:** I chose 409 for a stale `If-Match`, as the brief says, over RFC 9110's 412.
@@ -254,12 +255,35 @@ Every one of these really happened. Each is listed with the change it happened i
 | add-caching-resilience | Expected exactly 3 requests on connection resets; the JDK HTTP client replays an idempotent GET once by itself (6 requests) | test | attempts counted with status-based failures |
 | add-caching-resilience, add-seed-data | More tests that passed vacuously at red (loops over a stub's empty lists) | checking what passes at red | tests require the expected sizes first |
 
+In [pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's description has the details):
+
+| Change | What the AI got wrong | Caught by | Fix |
+|---|---|---|---|
+| bootstrap-web | Planned ESLint 9 to keep the original `jsx-a11y` plugin, but npm marks ESLint 9 unsupported | npm's deprecation notice | ESLint 10 with the maintained fork `eslint-plugin-jsx-a11y-x`, with its rules proved on a probe file |
+| bootstrap-web | Used MSW's and `eslint-plugin-react-refresh`'s older APIs (`onUnhandledRequest`; `configs.vite` as a function) | the compiler and lint | the current APIs |
+| add-auth-ui | Set the token on the API client in `useEffect`; React runs children's effects first, so after a reload the first query went out without the token, got a 401 and signed the user out | a red test | `useLayoutEffect` |
+| add-auth-ui | Signing out on a protected page redirected to sign-in | a red test | navigate home first |
+| add-auth-ui | An edit script missed its target after Prettier reflowed a line, and a `;`-chained command committed a lint error | lint, on the next run | fixed in the next commit (`7dc7a78`); commits only behind `gate && git commit` since |
+| add-catalog-ui | Used `prefetchQuery`, deprecated in TanStack Query 5.104 | type-aware lint | `queryClient.query(...)` |
+| add-catalog-ui | Chose MSW 3, whose socket-level interception sometimes let a test request reach the real network under load, silently bypassing "unmocked requests fail" | a flaky CI run, reproduced on one CPU and instrumented | MSW 2.15, which answers in memory |
+| add-detail-ui | `NavLink` marked "Catalog" as the current *page* on a Pokémon's page too | the real-browser check | test-first fix: `aria-current="true"` below the section |
+| add-detail-ui | Added a rule to an existing requirement, which passed the change's own validation but pushed the merged requirement past OpenSpec's 500-character limit | `validate --all --strict` after archiving | the rule as its own requirement; `validate --all` runs before every archive commit since |
+| add-detail-ui | Older finder tests ended at an address that this change turned into a real page, whose request raced the test's cleanup | a flaky CI run | the tests mock the page's request and wait for it |
+| add-local-pokemon-management-ui | The sign-out fix from add-auth-ui wasn't enough on the first real protected page: Testing Library's `act()` flushed React Router's transition, which a browser doesn't | the real-browser check | `flushSync`, with a test that clicks outside `act()` (red 3 of 3 before the fix) |
+| add-local-pokemon-management-ui | Piped the gate script into `tail`, which masked a failing type-check, so a red commit went in with a type error | the gate's output, before pushing | the unpushed commit amended; gates run with `pipefail` since |
+| add-e2e-and-polish | Playwright's `getByLabel('Notes')` also matched "Habitat notes" (substring by default, unlike Testing Library) | the first end-to-end run | `{ exact: true }` |
+| add-e2e-and-polish | `@axe-core/playwright`'s open peer range pulled a second, newer `playwright-core` | the type-check | `playwright-core` pinned to Playwright's version |
+| add-e2e-and-polish | An accessibility check waited for a record count that another test file changed in parallel | a flaky fresh-clone run (it passed on retry) | it waits for a record no test deletes, and three runs pass without retries |
+| add-e2e-and-polish | Committed `docker-compose.full.yml` without running the format gate | the next gate run | formatted in the next commit |
+
 Two fixes were to the build prompt this project started from, rather than to the AI's code, and were applied before any work began:
 - `docker run … node:22-alpine npm ci && npm test` would run `npm test` on the host, not in the container. It became `sh -c "npm ci && npm test"`.
 - `git log -p | grep -i token` as the secret check gives false hits on `TokenPort` and JWT code. It became gitleaks plus a grep for real GitHub token prefixes.
 
 Not every problem was the AI's code:
-- One finding is still open. Spring Security 7's default `/.well-known/oauth-protected-resource` metadata claims `tls_client_certificate_bound_access_tokens: true`, which this API doesn't support. It's reported, not changed.
+- Two findings are still open:
+  - Spring Security 7's default `/.well-known/oauth-protected-resource` metadata claims `tls_client_certificate_bound_access_tokens: true`, which this API doesn't support. It's reported, not changed.
+  - In pokedex-web's record forms, a mouse user who clicks **Save** right after leaving an invalid field sees that field's error appear. The error moves the button, so that click doesn't submit. Nothing is sent either way and the errors show, but focus doesn't move to the first problem until a second click. It was found while walking [the presentation's demo](PRESENTATION.md#the-demo). A candidate fix is validating on submit and then on change, instead of on leaving a field.
 - A few were process slips, such as a scripted multi-file edit that stopped halfway on a misread file layout. The script's own assertion caught it, and the edit was re-applied.
 
 **The lesson:** the AI is fast and usually right about the shape of a solution, and most often wrong about version-specific details and edge cases. Each guardrail above caught at least one real defect. Most were caught by the cheap mechanical checks (compiler, red-first tests, fresh clones), and the rest by deliberate review.
