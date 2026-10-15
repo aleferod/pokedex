@@ -1,3 +1,5 @@
+import { Link } from 'react-router';
+
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 
 export function HomePage() {
@@ -11,6 +13,12 @@ export function HomePage() {
         Browse every Pokémon from PokeAPI, and keep your own notes, tags and localized names for the
         ones your team cares about.
       </p>
+      <Link
+        to="/pokemon"
+        className="inline-block rounded-md bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
+      >
+        Browse the catalog
+      </Link>
     </section>
   );
 }

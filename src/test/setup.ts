@@ -7,7 +7,7 @@ import { server } from './server';
 
 // Unmocked requests are failures, not silent passes.
 beforeAll(() => {
-  server.listen({ onUnhandledFrame: 'error' });
+  server.listen({ onUnhandledRequest: 'error' });
 });
 afterAll(() => {
   server.close();

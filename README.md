@@ -7,7 +7,7 @@
 
 The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Ballast Lane Java technical exercise. It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
 
-> **Status:** `bootstrap-web` and `add-auth-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, and registration, sign-in and protected routes. The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
+> **Status:** `bootstrap-web`, `add-auth-ui` and `add-catalog-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, registration and sign-in with protected routes, and the paginated catalog (US01). The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
 
 ## Contents
 
@@ -18,6 +18,7 @@ The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Bal
 - [State management](#state-management)
 - [Talking to the API](#talking-to-the-api)
 - [Authentication](#authentication)
+- [Catalog](#catalog)
 - [Testing and quality gates](#testing-and-quality-gates)
 - [Docker](#docker)
 - [Spec-driven workflow](#spec-driven-workflow)
@@ -125,6 +126,21 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
 - **Signing out** clears the session and every cached query, so no protected data outlives it.
 - **Demo accounts** come from pokedex-api's seed data: `trainer / Trainer@123` (USER) and `admin / Admin@123` (ADMIN, can delete).
 
+## Catalog
+
+`/pokemon` (US01) shows the catalog as a responsive grid, from one column at 360 px up to four on desktop. Each card shows the sprite, `#number`, name, category, weight in kg and abilities, and links to the Pokémon's page.
+
+- **The URL is the state:** `?page` (1-based) and `?size` (20, 40 or 60), so a view can be shared and survives a reload. Defaults are left out (`/pokemon` is page 1 of 20), and nonsense values fall back to them.
+- **Paging:**
+  - Previous/Next and "Page N of M"; changing the page moves focus to the results heading.
+  - The current page stays on screen, marked busy, while the next one loads.
+  - The next page is fetched ahead of time.
+- **States:**
+  - skeleton cards with a "Loading Pokémon…" status
+  - "There are no Pokémon on this page" past the end, with a link to the last page
+  - an error with "Try again" (a 503 says PokeAPI is temporarily unavailable)
+- **Find a Pokémon:** a name or Pokédex number, checked with the API's own identifier rule, opens `/pokemon/<id or name>`. The catalog API has no text search, so this is how you jump to a Pokémon; tag and name filters come with the local Pokédex.
+
 ## Testing and quality gates
 
 ```bash
@@ -164,7 +180,7 @@ CI runs these jobs on every push and pull request:
 
 1. ✅ `bootstrap-web`: shell, API client, gates, Docker, CI
 2. ✅ `add-auth-ui`: register, login, token handling, protected routes
-3. `add-catalog-ui`: the paginated catalog (US01)
+3. ✅ `add-catalog-ui`: the paginated catalog (US01)
 4. `add-detail-ui`: the detail view with stats and the evolution chain (US02)
 5. `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
 6. `add-e2e-and-polish`: Playwright end-to-end tests, the full-stack Compose file, screenshots

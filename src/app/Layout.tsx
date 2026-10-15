@@ -40,6 +40,11 @@ export function Layout() {
                   Home
                 </NavLink>
               </li>
+              <li>
+                <NavLink to="/pokemon" className={navLinkClass}>
+                  Catalog
+                </NavLink>
+              </li>
               <AuthNav />
             </ul>
           </nav>

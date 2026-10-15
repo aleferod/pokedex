@@ -21,6 +21,11 @@ export function renderRoute(path: string, extraChildren: RouteObject[] = []) {
   ];
   const router = createMemoryRouter(testRoutes, { initialEntries: [path] });
   const queryClient = createQueryClient();
+  // Same retry policy as production, without waiting between attempts.
+  queryClient.setDefaultOptions({
+    ...queryClient.getDefaultOptions(),
+    queries: { ...queryClient.getDefaultOptions().queries, retryDelay: 0 },
+  });
   return {
     router,
     queryClient,
