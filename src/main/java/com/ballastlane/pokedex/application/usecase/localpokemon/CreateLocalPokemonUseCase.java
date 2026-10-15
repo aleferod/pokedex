@@ -72,7 +72,7 @@ public class CreateLocalPokemonUseCase implements CreateLocalPokemon {
 
   private PokemonDetail fetch(PokemonId pokeapiId) {
     try {
-      return getPokemonDetail.get(new PokemonIdentifier.ById(pokeapiId));
+      return getPokemonDetail.getFresh(new PokemonIdentifier.ById(pokeapiId));
     } catch (PokemonNotFoundException unknown) {
       throw new InvalidFieldException(POKEAPI_ID, "no Pokémon has this number");
     }

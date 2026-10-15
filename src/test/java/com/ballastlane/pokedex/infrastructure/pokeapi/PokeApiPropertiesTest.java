@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -23,6 +24,37 @@ class PokeApiPropertiesTest {
     assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(5));
     assertThat(properties.maxConcurrency()).isEqualTo(8);
     assertThat(properties.userAgent()).startsWith("pokedex-api");
+  }
+
+  @Test
+  void should_applyTheResilienceDefaults_when_nothingIsSet() {
+    PokeApiProperties properties = bind(Map.of("base-url", "https://pokeapi.co/api/v2"));
+
+    assertThat(properties.retry().maxAttempts()).isEqualTo(3);
+    assertThat(properties.retry().initialBackoff()).isEqualTo(Duration.ofMillis(200));
+    assertThat(properties.circuitBreaker().failureRateThreshold()).isEqualTo(50f);
+    assertThat(properties.circuitBreaker().minimumCalls()).isEqualTo(10);
+    assertThat(properties.circuitBreaker().slidingWindow()).isEqualTo(20);
+    assertThat(properties.circuitBreaker().openDuration()).isEqualTo(Duration.ofSeconds(30));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "retry.max-attempts, 0",
+    "retry.max-attempts, 11",
+    "retry.initial-backoff, PT0S",
+    "circuit-breaker.failure-rate-threshold, 0",
+    "circuit-breaker.failure-rate-threshold, 101",
+    "circuit-breaker.minimum-calls, 0",
+    "circuit-breaker.sliding-window, 0",
+    "circuit-breaker.minimum-calls, 21",
+    "circuit-breaker.open-duration, PT0S"
+  })
+  void should_reject_when_aResilienceSettingIsNonsensical(String property, String value) {
+    assertThatThrownBy(() -> bind(Map.of("base-url", "https://pokeapi.co/api/v2", property, value)))
+        .isInstanceOf(BindException.class)
+        .rootCause()
+        .hasMessageContaining(property);
   }
 
   @ParameterizedTest

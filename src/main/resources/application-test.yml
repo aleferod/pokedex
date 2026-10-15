@@ -11,3 +11,11 @@ app:
     password:
       # Minimum BCrypt cost keeps the suite fast; production uses 10+.
       bcrypt-strength: 4
+  pokeapi:
+    retry:
+      # Same policy, shorter waits: keeps the failure tests fast.
+      initial-backoff: 10ms
+    circuit-breaker:
+      # Each integration-test context shares one breaker; only PokeApiResilienceIT trips it.
+      minimum-calls: 100
+      sliding-window: 100

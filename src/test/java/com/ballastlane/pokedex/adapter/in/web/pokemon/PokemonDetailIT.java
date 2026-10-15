@@ -2,6 +2,7 @@ package com.ballastlane.pokedex.adapter.in.web.pokemon;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -10,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ballastlane.pokedex.adapter.out.pokeapi.PokeApiFixtures;
 import com.ballastlane.pokedex.support.IntegrationTest;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -104,6 +106,79 @@ class PokemonDetailIT {
         .expectBody()
         .jsonPath("$.detail")
         .isEqualTo("No Pokémon matches 'missingno'.");
+  }
+
+  @Test
+  void should_serveTheNumberFromTheCache_when_thePokemonWasLoadedByName() {
+    // Given
+    stub("pikachu", 25, 25, 10);
+
+    // When
+    String byName = detail("pikachu");
+    String byNumber = detail("25");
+
+    // Then
+    assertThat(byNumber).isEqualTo(byName);
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/pikachu")));
+    POKEAPI.verify(0, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/25")));
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon-species/25")));
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/evolution-chain/10")));
+  }
+
+  @Test
+  void should_rememberAnUnknownPokemon_when_askedTwice() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/missingno")).willReturn(aResponse().withStatus(404)));
+
+    for (int visit = 0; visit < 2; visit++) {
+      client.get().uri("/api/v1/pokemon/missingno").exchange().expectStatus().isNotFound();
+    }
+
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/missingno")));
+  }
+
+  @Test
+  void should_absorbAOneOffFailure_when_pokeApiBlips() {
+    // Given the Pokémon request fails once with 503, then succeeds
+    stub("1", 1, 1, 1);
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .inScenario("blip")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .willReturn(aResponse().withStatus(503))
+            .willSetStateTo("recovered"));
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .inScenario("blip")
+            .whenScenarioStateIs("recovered")
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-1.json"))));
+
+    // When / Then
+    assertThat(detail("1")).contains("bulbasaur");
+    POKEAPI.verify(2, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_answer503AfterOneRequest_when_pokeApiIsTooSlow() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-1.json")).withFixedDelay(6_000)));
+
+    client.get().uri("/api/v1/pokemon/1").exchange().expectStatus().isEqualTo(503);
+
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  private String detail(String idOrName) {
+    return client
+        .get()
+        .uri("/api/v1/pokemon/{idOrName}", idOrName)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(String.class)
+        .returnResult()
+        .getResponseBody();
   }
 
   private static void stub(String pathSegment, int pokemon, int species, int chain) {

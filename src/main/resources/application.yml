@@ -69,6 +69,23 @@ app:
     # Instance-wide cap on concurrent PokeAPI detail fetches.
     max-concurrency: 8
     user-agent: pokedex-api/@project.version@ (+https://github.com/aleferod/pokedex-api)
+    retry:
+      # Connection failures, 5xx and 429 only; timeouts and 404 are never retried.
+      max-attempts: 3
+      # Doubles after each failed attempt, with +/-50% jitter.
+      initial-backoff: 200ms
+    circuit-breaker:
+      # Open when this % of the last sliding-window calls failed (after minimum-calls calls)...
+      failure-rate-threshold: 50
+      minimum-calls: 10
+      sliding-window: 20
+      # ...and answer 503 at once for this long, then allow 3 trial calls.
+      open-duration: PT30S
+  catalog-cache:
+    # How long a catalog page or Pokémon detail is reused before PokeAPI is asked again.
+    ttl: ${CATALOG_CACHE_TTL:PT1H}
+    # Entries per cache (pages, details); the least valuable are evicted first.
+    max-entries: 2000
   cors:
     # Comma-separated exact origins (no wildcards). Default: the Vite dev server of pokedex-web.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}

@@ -139,6 +139,23 @@ class LocalPokemonSyncIT {
   }
 
   @Test
+  void should_readPokeApiFreshAndRefreshTheCatalog_when_resyncedAfterAChange() {
+    // Given Pikachu's catalog detail is cached at 6.0 kg, and the local copy was imported
+    stubPikachu(60, 0);
+    assertThat(catalogWeight()).isEqualTo(6.0);
+    sync("pikachu", ash);
+
+    // When PokeAPI now reports 6.1 kg: the catalog still serves its cached copy...
+    stubPikachu(61, 0);
+    assertThat(catalogWeight()).isEqualTo(6.0);
+    EntityExchangeResult<Map<String, Object>> resynced = sync("25", misty);
+
+    // Then ...but a re-sync reads PokeAPI itself, and the catalog shows the new data too
+    assertThat(resynced.getResponseBody()).containsEntry("weight", 6.1);
+    assertThat(catalogWeight()).isEqualTo(6.1);
+  }
+
+  @Test
   void should_keepASingleRecord_when_twoFirstImportsRace() throws Exception {
     // Given PokeAPI is slow enough for both requests to miss the existing record
     stubPikachu(60, 300);
@@ -205,6 +222,20 @@ class LocalPokemonSyncIT {
         .isEqualTo(List.of("bulbasaur", "ivysaur", "venusaur"));
     assertThat(jdbc.queryForObject("select count(*) from local_pokemon", Integer.class))
         .isEqualTo(3);
+  }
+
+  private double catalogWeight() {
+    Map<String, Object> detail =
+        client
+            .get()
+            .uri("/api/v1/pokemon/25")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(JSON)
+            .returnResult()
+            .getResponseBody();
+    return ((Number) detail.get("weight")).doubleValue();
   }
 
   private int awaitThenSync(CountDownLatch start, String bearer) {

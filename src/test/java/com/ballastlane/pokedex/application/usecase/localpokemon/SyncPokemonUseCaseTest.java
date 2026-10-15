@@ -63,7 +63,7 @@ class SyncPokemonUseCaseTest {
   @Test
   void should_importWithEmptyProprietaryData_when_notStoredYet() {
     // Given
-    given(getPokemonDetail.get(PIKACHU)).willReturn(detail(61));
+    given(getPokemonDetail.getFresh(PIKACHU)).willReturn(detail(61));
     given(repository.findByPokeapiId(NUMBER_25)).willReturn(Optional.empty());
     given(repository.save(any())).willAnswer(invocation -> stored(invocation.getArgument(0), 0L));
 
@@ -85,7 +85,7 @@ class SyncPokemonUseCaseTest {
   void should_refreshUpstreamAndKeepProprietaryData_when_alreadyStored() {
     // Given
     LocalPokemon existing = existingWithProprietaryData(3L);
-    given(getPokemonDetail.get(PIKACHU)).willReturn(detail(61));
+    given(getPokemonDetail.getFresh(PIKACHU)).willReturn(detail(61));
     given(repository.findByPokeapiId(NUMBER_25)).willReturn(Optional.of(existing));
     given(repository.save(any())).willAnswer(invocation -> stored(invocation.getArgument(0), 4L));
 
@@ -104,7 +104,7 @@ class SyncPokemonUseCaseTest {
   @Test
   void should_touchNothing_when_pokemonIsUnknown() {
     PokemonIdentifier missingno = PokemonIdentifier.parse("missingno");
-    given(getPokemonDetail.get(missingno)).willThrow(new PokemonNotFoundException(missingno));
+    given(getPokemonDetail.getFresh(missingno)).willThrow(new PokemonNotFoundException(missingno));
 
     assertThatThrownBy(() -> syncPokemon.sync(missingno, "ash"))
         .isInstanceOf(PokemonNotFoundException.class);
@@ -113,7 +113,7 @@ class SyncPokemonUseCaseTest {
 
   @Test
   void should_touchNothing_when_pokeApiIsUnavailable() {
-    given(getPokemonDetail.get(PIKACHU))
+    given(getPokemonDetail.getFresh(PIKACHU))
         .willThrow(new CatalogUnavailableException("PokeAPI unreachable", null));
 
     assertThatThrownBy(() -> syncPokemon.sync(PIKACHU, "ash"))
@@ -125,7 +125,7 @@ class SyncPokemonUseCaseTest {
   void should_resyncTheWinner_when_aConcurrentFirstImportWonTheRace() {
     // Given the insert loses against a concurrent first import
     LocalPokemon winner = existingWithProprietaryData(0L);
-    given(getPokemonDetail.get(PIKACHU)).willReturn(detail(61));
+    given(getPokemonDetail.getFresh(PIKACHU)).willReturn(detail(61));
     given(repository.findByPokeapiId(NUMBER_25))
         .willReturn(Optional.empty())
         .willReturn(Optional.of(winner));
@@ -147,7 +147,7 @@ class SyncPokemonUseCaseTest {
     // Given
     LocalPokemon readFirst = existingWithProprietaryData(3L);
     LocalPokemon readAgain = existingWithProprietaryData(4L);
-    given(getPokemonDetail.get(PIKACHU)).willReturn(detail(61));
+    given(getPokemonDetail.getFresh(PIKACHU)).willReturn(detail(61));
     given(repository.findByPokeapiId(NUMBER_25))
         .willReturn(Optional.of(readFirst))
         .willReturn(Optional.of(readAgain));
@@ -166,14 +166,14 @@ class SyncPokemonUseCaseTest {
   @Test
   void should_giveUp_when_theRetryIsStaleToo() {
     LocalPokemon existing = existingWithProprietaryData(3L);
-    given(getPokemonDetail.get(PIKACHU)).willReturn(detail(61));
+    given(getPokemonDetail.getFresh(PIKACHU)).willReturn(detail(61));
     given(repository.findByPokeapiId(NUMBER_25)).willReturn(Optional.of(existing));
     given(repository.save(any())).willThrow(new StaleLocalPokemonException(existing.id()));
 
     assertThatThrownBy(() -> syncPokemon.sync(PIKACHU, "misty"))
         .isInstanceOf(StaleLocalPokemonException.class);
     then(repository).should(times(2)).save(any());
-    then(getPokemonDetail).should(times(1)).get(PIKACHU);
+    then(getPokemonDetail).should(times(1)).getFresh(PIKACHU);
     then(repository).should(never()).findById(any());
   }
 

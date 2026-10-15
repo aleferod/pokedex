@@ -7,13 +7,14 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** six changes are done.
+> **Status:** seven changes are done.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
 > - `add-pokemon-detail`: US02, the detailed view with the evolution tree.
 > - `add-local-sync`: US03, the local replica in PostgreSQL with proprietary fields.
 > - `add-local-crud`: US04, listing, creating, editing and deleting local records with ETags and optimistic locking.
+> - `add-caching-resilience`: a Caffeine cache in front of PokeAPI, plus retries and a circuit breaker on every PokeAPI request.
 >
 > The remaining user stories land one OpenSpec change at a time. See [Roadmap](#roadmap).
 
@@ -25,6 +26,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [Detail view (US02)](#detail-view-us02)
 - [Local replica (US03)](#local-replica-us03)
 - [Managing local records (US04)](#managing-local-records-us04)
+- [Caching and resilience](#caching-and-resilience)
 - [Authentication](#authentication)
 - [Error format](#error-format)
 - [Architecture](#architecture)
@@ -113,9 +115,9 @@ curl -s 'localhost:8080/api/v1/pokemon?page=0&size=2'
 - A page past the end returns 200 with empty `content`.
 - `totalElements` is PokeAPI's own count, which includes alternate forms (ids 10001+).
 
-**When PokeAPI is unreachable, slow (past the 5 s read timeout) or failing:** the API answers in time with **503** `service-unavailable` and `Retry-After: 30`. It never hangs, and never echoes upstream errors.
+**When PokeAPI is unreachable, slow (past the 5 s read timeout) or failing after retries:** the API answers in time with **503** `service-unavailable` and `Retry-After: 30`. It never hangs, and never echoes upstream errors.
 
-**How a page is built:** PokeAPI's list endpoint only returns names, so each entry needs `/pokemon/{id}` and `/pokemon-species/{id}`. That's 1 + 2N calls for a page of N. The adapter fetches entries **in parallel on virtual threads**, behind an instance-wide cap (`max-concurrency`, default 8) that protects PokeAPI. A 10-entry page whose upstream calls take 300 ms each returns in well under a second, against 6 s if fetched sequentially. Caching, retry and the circuit breaker come with `add-caching-resilience`.
+**How a page is built:** PokeAPI's list endpoint only returns names, so each entry needs `/pokemon/{id}` and `/pokemon-species/{id}`. That's 1 + 2N calls for a page of N. The adapter fetches entries **in parallel on virtual threads**, behind an instance-wide cap (`max-concurrency`, default 8) that protects PokeAPI. A 10-entry page whose upstream calls take 300 ms each returns in well under a second, against 6 s if fetched sequentially. A page that was already served comes from the cache with no upstream calls at all; see [Caching and resilience](#caching-and-resilience).
 
 ## Detail view (US02)
 
@@ -273,6 +275,46 @@ Editing changes `updatedAt` and the version. The upstream fields and `syncedAt` 
   - `localizedNames`: at most 10 locales such as `pt-BR`, with names of 1–50 characters.
 - **Every problem at once.** A request that breaks several rules gets one 400 listing each field (Notification pattern), for example `region` and `internalTags` together. Wrong JSON types and unknown members are named the same way.
 
+## Caching and resilience
+
+PokeAPI is a free public service: polite clients cache, and it sometimes stumbles. Every catalog read goes through a cache, and every PokeAPI request goes through a retry and a circuit breaker ([ADR-0003](docs/adr/0003-caffeine-cache-and-resilience4j-for-pokeapi.md)).
+
+```mermaid
+flowchart LR
+  uc["ListPokemon / GetPokemonDetail"] --> cache["CachingPokemonCatalog<br/>(Spring Cache on Caffeine)"]
+  cache -->|miss| adapter["PokeApiCatalogAdapter"]
+  adapter --> client["PokeApiClient<br/>Retry → CircuitBreaker → HTTP"]
+  client -->|HTTPS| pokeapi[("PokeAPI")]
+  sync["SyncPokemon / CreateLocalPokemon"] -->|"fresh read, then write-through"| cache
+```
+
+**Cache:**
+- **What's cached:** catalog pages (by `page` and `size`) and details. A detail is reachable by number **and** by name, so `/pokemon/pikachu` followed by `/pokemon/25` costs PokeAPI 3 requests, not 6.
+- **Unknown Pokémon** are remembered as unknown, so typos don't reach PokeAPI again.
+- **Limits:** entries live for `CATALOG_CACHE_TTL` (default 1 hour), with at most 2000 per cache.
+- **Never cached:** failures, so the request after an outage asks PokeAPI again.
+- **One load at a time:** simultaneous first requests for the same entry trigger **one** load.
+- **The local replica never stores a cached copy.** Import, re-sync and create read PokeAPI directly and then refresh the cached detail, so after a re-sync the catalog shows the new data too.
+
+**Resilience (Resilience4j, explicit decoration, no AOP):**
+
+| Upstream failure | Retried? | Counts against the circuit? |
+|---|---|---|
+| Connection refused or reset, other I/O errors | yes | yes |
+| 5xx, 429 | yes | yes |
+| Timeout (2 s connect, 5 s read) | no: it has already cost the full timeout | yes |
+| 404 | no (a normal answer) | no |
+| Other 4xx, unreadable answer | no | yes |
+
+- **Retry:** at most 3 attempts per request, waiting about 200 ms and then 400 ms, with jitter.
+- **Circuit breaker:** when half of the last 20 calls failed (counting starts after 10), PokeAPI isn't called for 30 s. Requests answer 503 at once, then 3 trial calls decide whether to close it again.
+- **Logs:** every retry (INFO) and every state change (WARN, for example `PokeAPI circuit breaker changed from CLOSED to OPEN`) is logged with the request's correlation id.
+
+The integration tests prove each of these behaviours with WireMock request counts:
+- a second visit makes zero requests
+- a 503 blip makes two requests and still answers 200
+- an open circuit makes zero requests
+
 ## Authentication
 
 Stateless bearer tokens (JWT, HS256), issued by the API itself ([ADR-0002](docs/adr/0002-stateless-jwt-authentication.md)).
@@ -347,7 +389,8 @@ flowchart LR
     model["Entities, value objects,<br/>domain services, domain exceptions"]
   end
   subgraph OUT["outbound adapters"]
-    pokeapi["adapter.out.pokeapi<br/>RestClient, anti-corruption mapper,<br/>cache, resilience"]
+    cache["adapter.out.cache<br/>Caffeine-backed Decorator"]
+    pokeapi["adapter.out.pokeapi<br/>RestClient + retry/circuit breaker,<br/>anti-corruption mapper"]
     persistence["adapter.out.persistence<br/>JPA entities, Spring Data, mappers"]
   end
   infra["infrastructure<br/>Spring config, security, wiring"]
@@ -355,6 +398,8 @@ flowchart LR
   usecases -. implements .-> portIn
   usecases --> portOut
   usecases --> model
+  cache -. implements .-> portOut
+  cache --> pokeapi
   pokeapi -. implements .-> portOut
   persistence -. implements .-> portOut
   pokeapi -->|HTTPS| ext[("PokeAPI")]
@@ -370,7 +415,8 @@ flowchart LR
 | `domain` | JDK only | Business model and rules |
 | `application.port.in` / `.port.out` / `.usecase` | `domain`, JDK | Use cases and the ports they expose and need |
 | `adapter.in.web` | application, domain, Spring | REST, DTOs, error translation, correlation id, CORS |
-| `adapter.out.pokeapi` | application, domain, Spring | PokeAPI client and anti-corruption layer |
+| `adapter.out.cache` | application, domain, Spring Cache | Caching Decorator for the catalog port |
+| `adapter.out.pokeapi` | application, domain, Spring, Resilience4j | PokeAPI client with retry and circuit breaker, and the anti-corruption layer |
 | `adapter.out.persistence` | application, domain, Spring/JPA | PostgreSQL persistence |
 | `infrastructure` | everything | Configuration and wiring |
 
@@ -399,7 +445,9 @@ flowchart LR
 | Bulkhead | `BoundedFanOut`: virtual threads behind one shared semaphore | ✅ |
 | Strategy | `EvolutionConditionStrategy` (`LevelUpCondition`, `UseItemCondition`, `TradeCondition`, `FallbackCondition`), chosen per PokeAPI trigger by `EvolutionConditions`. The chain itself stays a tree rather than being flattened, so branching isn't lost. | ✅ |
 | Composite-style tree | `EvolutionStage` / `EvolutionStageResponse` (recursive) | ✅ |
-| Decorator / Proxy | Spring Cache around the catalog port | planned |
+| Decorator | `CachingPokemonCatalog` around `PokemonCatalogPort` (Spring Cache on Caffeine); the use cases can't tell | ✅ |
+| Retry with exponential backoff and jitter | `PokeApiResilience` (Resilience4j), only for failures `PokeApiClient` marks transient | ✅ |
+| Circuit Breaker | `PokeApiResilience`: fail fast while PokeAPI is down; 404 never counts | ✅ |
 | DTO + Mapper | `AuthWebMapper`, `PokemonWebMapper`, `LocalPokemonWebMapper`, `UserPersistenceMapper` (MapStruct), `LocalPokemonPersistenceMapper` | ✅ |
 
 ## Tech stack
@@ -417,8 +465,8 @@ flowchart LR
 | JUnit 6, AssertJ, Mockito, ArchUnit, Testcontainers | Fast unit tests, real-database integration tests, architecture tests ([ADR-0004](docs/adr/0004-testcontainers-over-in-memory-databases.md)) |
 | Spotless (google-java-format), JaCoCo, Maven Enforcer | Formatting, coverage and dependency gates in every build |
 | Docker (multi-stage, layered, non-root) + Compose | One-command local stack; the host needs only Docker |
-
-Coming with later changes: Resilience4j and Caffeine.
+| Spring Cache + Caffeine | In-process cache with TinyLFU eviction and per-key loading; one class to swap for Redis later ([ADR-0003](docs/adr/0003-caffeine-cache-and-resilience4j-for-pokeapi.md)) |
+| Resilience4j (retry, circuit breaker) | Core modules decorated explicitly, with no AOP, configured by validated properties ([ADR-0003](docs/adr/0003-caffeine-cache-and-resilience4j-for-pokeapi.md)) |
 
 ## Configuration
 
@@ -432,7 +480,8 @@ Everything that varies between environments comes from environment variables. `d
 | `DB_URL` | derived | Optional JDBC URL override for the local profile |
 | `SERVER_PORT` | `8080` | Host port of the API |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated exact origins allowed to call `/api/**`. Wildcards are rejected at startup. |
-| `POKEAPI_BASE_URL` | `https://pokeapi.co/api/v2` | Upstream catalog. Timeouts (2 s connect, 5 s read) and the concurrency cap (8) are under `app.pokeapi.*` in `application.yml`. |
+| `POKEAPI_BASE_URL` | `https://pokeapi.co/api/v2` | Upstream catalog. Timeouts (2 s connect, 5 s read), the concurrency cap (8), retries (`app.pokeapi.retry.*`) and the circuit breaker (`app.pokeapi.circuit-breaker.*`) are in `application.yml`. |
+| `CATALOG_CACHE_TTL` | `PT1H` | How long catalog pages and details are reused (ISO-8601). The size limit is `app.catalog-cache.max-entries` (2000 per cache). |
 | `JWT_SECRET` | **none (required)** | HMAC key that signs access tokens, at least 32 bytes. Startup fails naming it if it's missing or short. |
 | `JWT_TTL` | `PT1H` | Access-token lifetime (ISO-8601 duration) |
 | `BCRYPT_STRENGTH` | `10` | BCrypt cost factor |
@@ -504,6 +553,7 @@ The process for each change:
 See [docs/adr](docs/adr/README.md). Written so far:
 - 0001: Clean/Hexagonal Architecture in one module, enforced by ArchUnit
 - 0002: Stateless JWT authentication issued by the API
+- 0003: In-process Caffeine cache and Resilience4j in front of PokeAPI
 - 0004: Testcontainers instead of H2
 - 0005: OpenSpec
 - 0006: Spring Boot 4.1
@@ -518,7 +568,7 @@ Each item is one OpenSpec change and one pull request:
 4. ✅ `add-pokemon-detail`: US02 stats, description, evolution chain
 5. ✅ `add-local-sync`: US03 import into PostgreSQL with proprietary fields
 6. ✅ `add-local-crud`: US04 CRUD with validation, ETags and optimistic locking
-7. `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
+7. ✅ `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. `add-seed-data`: demo users and about 10 local Pokémon
 9. `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
 
@@ -529,10 +579,12 @@ Each item is one OpenSpec change and one pull request:
 - **Squash merges.** `main` stays linear. The red/green TDD commits remain visible in each pull request.
 - **409 instead of 412 for a stale `If-Match`.** The exercise asks for 409. The 412 problem type stays documented but isn't returned.
 - **Native SQL for the local list.** The tag filter uses PostgreSQL array containment so the GIN index serves it. That ties the query to PostgreSQL, which is the only database, and Testcontainers runs the real one. `name` matches the PokeAPI name only; searching localized names is future work.
+- **In-process cache.** Each instance has its own cache, and catalog data can be up to one TTL old (the local replica always reads fresh). A shared Redis cache behind the same Decorator is the next step (ADR-0003).
+- **Retries add latency on failure.** That's at most about 0.6 s, and only for fast-failing errors; timeouts aren't retried. The JDK HTTP client may also replay a GET once by itself when a connection drops.
 - **Auth limits:** HS256 shared secret, no refresh tokens or revocation, no login rate limiting. Each is mitigated and has a next step in ADR-0002.
 - **Future work:**
   - structured JSON logs and distributed tracing (Micrometer/OpenTelemetry)
-  - a Redis cache for multi-instance deployments
+  - a Redis cache for multi-instance deployments, and serving stale entries while PokeAPI is down (stale-if-error)
   - image publishing and a deploy pipeline
   - contract tests shared with the frontend
 

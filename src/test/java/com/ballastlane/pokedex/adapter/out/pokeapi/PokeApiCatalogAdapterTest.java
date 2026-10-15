@@ -4,6 +4,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
+import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
@@ -18,7 +19,9 @@ import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.shared.Page;
 import com.ballastlane.pokedex.domain.shared.PageRequest;
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
@@ -28,6 +31,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** The PokeAPI adapter against a WireMock PokeAPI serving real (trimmed) captures. */
 class PokeApiCatalogAdapterTest {
@@ -118,7 +123,8 @@ class PokeApiCatalogAdapterTest {
                 "http://localhost:" + closedPort + "/api/v2",
                 CONNECT_TIMEOUT,
                 READ_TIMEOUT,
-                "pokedex-api-test"),
+                "pokedex-api-test",
+                resilience()),
             new BoundedFanOut(8));
 
     assertThatThrownBy(() -> unreachable.findPage(new PageRequest(0, 3)))
@@ -224,6 +230,94 @@ class PokeApiCatalogAdapterTest {
         .isInstanceOf(CatalogUnavailableException.class);
   }
 
+  // ---- retries (classification of upstream failures) ------------------------------------------
+
+  @ParameterizedTest
+  @ValueSource(ints = {500, 502, 503, 504, 429})
+  void should_retryAndSucceed_when_pokeApiFailsTransientlyOnce(int status) {
+    // Given the Pokémon request fails once with this status, then succeeds
+    stubDetail("1", 1, 1, 1);
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .inScenario("blip")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .willReturn(aResponse().withStatus(status))
+            .willSetStateTo("recovered"));
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .inScenario("blip")
+            .whenScenarioStateIs("recovered")
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-1.json"))));
+
+    // When / Then
+    assertThat(adapter(8).findDetail(PokemonIdentifier.parse("1"))).isPresent();
+    POKEAPI.verify(2, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_giveUpAfterThreeAttempts_when_pokeApiKeepsFailing() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1")).willReturn(aResponse().withStatus(503)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+    POKEAPI.verify(3, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_retryThenGiveUp_when_connectionsKeepBeingReset() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+    // Three attempts of ours; the JDK client may also replay an idempotent GET on a dropped
+    // connection, so PokeAPI can see more.
+    POKEAPI.verify(moreThanOrExactly(3), getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_askOnlyOnce_when_pokeApiIsTooSlow() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .willReturn(okJson(PokeApiFixtures.json("pokemon-1.json")).withFixedDelay(5_000)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_askOnlyOnce_when_pokeApiDoesNotKnowThePokemon() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/missingno")).willReturn(aResponse().withStatus(404)));
+
+    assertThat(adapter(8).findDetail(PokemonIdentifier.parse("missingno"))).isEmpty();
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/missingno")));
+  }
+
+  @Test
+  void should_askOnlyOnce_when_pokeApiRejectsTheRequest() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1")).willReturn(aResponse().withStatus(400)));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
+  @Test
+  void should_askOnlyOnce_when_theAnswerIsNotReadable() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/1"))
+            .willReturn(aResponse().withHeader("Content-Type", "application/json").withBody("{")));
+
+    assertThatThrownBy(() -> adapter(8).findDetail(PokemonIdentifier.parse("1")))
+        .isInstanceOf(CatalogUnavailableException.class);
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon/1")));
+  }
+
   private static void stubDetail(String pathSegment, int pokemon, int species, int chain) {
     POKEAPI.stubFor(
         get(urlPathEqualTo("/api/v2/pokemon/" + pathSegment))
@@ -239,8 +333,19 @@ class PokeApiCatalogAdapterTest {
   private static PokeApiCatalogAdapter adapter(int maxConcurrency) {
     return new PokeApiCatalogAdapter(
         PokeApiClient.create(
-            POKEAPI.baseUrl() + "/api/v2", CONNECT_TIMEOUT, READ_TIMEOUT, "pokedex-api-test/1.0"),
+            POKEAPI.baseUrl() + "/api/v2",
+            CONNECT_TIMEOUT,
+            READ_TIMEOUT,
+            "pokedex-api-test/1.0",
+            resilience()),
         new BoundedFanOut(maxConcurrency));
+  }
+
+  /** Production retry policy with a short backoff; a circuit that never opens in these tests. */
+  private static PokeApiResilience resilience() {
+    return new PokeApiResilience(
+        new PokeApiResilience.Settings(
+            3, Duration.ofMillis(10), 50f, 1000, 1000, Duration.ofSeconds(30)));
   }
 
   private static void stubFirstThree() {

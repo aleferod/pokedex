@@ -4,33 +4,44 @@ import com.ballastlane.pokedex.adapter.out.pokeapi.dto.EvolutionChainDto;
 import com.ballastlane.pokedex.adapter.out.pokeapi.dto.PokemonDto;
 import com.ballastlane.pokedex.adapter.out.pokeapi.dto.PokemonSpeciesDto;
 import com.ballastlane.pokedex.adapter.out.pokeapi.dto.ResourceListDto;
+import java.net.SocketTimeoutException;
 import java.net.http.HttpClient;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
  * Thin, polite HTTP client for PokeAPI: fixed base URL, connect and read timeouts, an identifying
- * {@code User-Agent}. A 404 becomes a {@link PokeApiNotFoundException}; any other transport error,
- * timeout, non-2xx answer or empty body becomes a {@link PokeApiUnavailableException}. Callers
- * never see Spring's HTTP exceptions.
+ * {@code User-Agent}, and {@link PokeApiResilience} (retry, circuit breaker) around every request.
+ * A 404 becomes a {@link PokeApiNotFoundException}; any other transport error, timeout, non-2xx
+ * answer or empty body becomes a {@link PokeApiUnavailableException}, marked retryable for
+ * connection failures, 5xx and 429. Callers never see Spring's HTTP exceptions.
  */
 public final class PokeApiClient {
 
   private final RestClient http;
+  private final PokeApiResilience resilience;
 
-  private PokeApiClient(RestClient http) {
+  private PokeApiClient(RestClient http, PokeApiResilience resilience) {
     this.http = http;
+    this.resilience = resilience;
   }
 
   /** The production construction, also used by tests so timeouts and headers are exercised. */
   public static PokeApiClient create(
-      String baseUrl, Duration connectTimeout, Duration readTimeout, String userAgent) {
+      String baseUrl,
+      Duration connectTimeout,
+      Duration readTimeout,
+      String userAgent,
+      PokeApiResilience resilience) {
     HttpClient httpClient =
         HttpClient.newBuilder()
             .connectTimeout(connectTimeout)
@@ -45,7 +56,8 @@ public final class PokeApiClient {
             .requestFactory(requestFactory)
             .defaultHeader(HttpHeaders.USER_AGENT, userAgent)
             .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-            .build());
+            .build(),
+        resilience);
   }
 
   ResourceListDto listPokemon(long offset, int limit) {
@@ -86,18 +98,37 @@ public final class PokeApiClient {
         () -> http.get().uri("/evolution-chain/{id}", id).retrieve().body(EvolutionChainDto.class));
   }
 
-  private static <T> T call(String what, Supplier<T> request) {
+  private <T> T call(String what, Supplier<T> request) {
+    return resilience.call(what, () -> attempt(what, request));
+  }
+
+  /** One HTTP attempt, its failure classified as transient (worth retrying) or not. */
+  private static <T> T attempt(String what, Supplier<T> request) {
     T body;
     try {
       body = request.get();
     } catch (HttpClientErrorException.NotFound notFound) {
       throw new PokeApiNotFoundException("PokeAPI has no " + what, notFound);
+    } catch (HttpServerErrorException | HttpClientErrorException.TooManyRequests overloaded) {
+      throw new PokeApiUnavailableException("PokeAPI request failed: " + what, overloaded, true);
+    } catch (ResourceAccessException io) {
+      // A timeout has already cost the full timeout: repeating it would only double the wait.
+      throw new PokeApiUnavailableException("PokeAPI request failed: " + what, io, !isTimeout(io));
     } catch (RestClientException failure) {
-      throw new PokeApiUnavailableException("PokeAPI request failed: " + what, failure);
+      throw new PokeApiUnavailableException("PokeAPI request failed: " + what, failure, false);
     }
     if (body == null) {
       throw new PokeApiUnavailableException("PokeAPI returned no body: " + what, null);
     }
     return body;
+  }
+
+  private static boolean isTimeout(Throwable failure) {
+    for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      if (cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException) {
+        return true;
+      }
+    }
+    return false;
   }
 }

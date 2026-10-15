@@ -9,10 +9,11 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestExecutionListeners;
 
 /**
  * Full application on a random port, {@code test} profile, real PostgreSQL via Testcontainers and a
- * {@code RestTestClient} bound to the running server.
+ * {@code RestTestClient} bound to the running server. Caches are emptied before each test.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -21,4 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 @AutoConfigureRestTestClient
 @ActiveProfiles("test")
 @Import(PostgresTestcontainersConfiguration.class)
+@TestExecutionListeners(
+    listeners = ClearCachesTestExecutionListener.class,
+    mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 public @interface IntegrationTest {}

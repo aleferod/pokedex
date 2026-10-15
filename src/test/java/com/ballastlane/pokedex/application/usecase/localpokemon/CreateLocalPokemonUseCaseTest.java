@@ -63,7 +63,7 @@ class CreateLocalPokemonUseCaseTest {
   void should_storeUpstreamAndNormalizedProprietaryData_when_numberIsNew() {
     // Given
     given(repository.existsByPokeapiId(NUMBER_25)).willReturn(false);
-    given(getPokemonDetail.get(BY_NUMBER_25)).willReturn(detail());
+    given(getPokemonDetail.getFresh(BY_NUMBER_25)).willReturn(detail());
     given(repository.save(any()))
         .willAnswer(invocation -> withVersion(invocation.getArgument(0), 0));
 
@@ -117,7 +117,8 @@ class CreateLocalPokemonUseCaseTest {
   @Test
   void should_reportPokeapiIdAsInvalid_when_pokeApiHasNoSuchNumber() {
     given(repository.existsByPokeapiId(NUMBER_25)).willReturn(false);
-    given(getPokemonDetail.get(BY_NUMBER_25)).willThrow(new PokemonNotFoundException(BY_NUMBER_25));
+    given(getPokemonDetail.getFresh(BY_NUMBER_25))
+        .willThrow(new PokemonNotFoundException(BY_NUMBER_25));
 
     assertThatThrownBy(
             () ->
@@ -134,7 +135,7 @@ class CreateLocalPokemonUseCaseTest {
   @Test
   void should_storeNothing_when_pokeApiIsUnavailable() {
     given(repository.existsByPokeapiId(NUMBER_25)).willReturn(false);
-    given(getPokemonDetail.get(BY_NUMBER_25))
+    given(getPokemonDetail.getFresh(BY_NUMBER_25))
         .willThrow(new CatalogUnavailableException("down", null));
 
     assertThatThrownBy(

@@ -15,10 +15,10 @@ import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import java.time.Clock;
 
 /**
- * Imports a Pokémon into the local store or refreshes it. PokeAPI is read first (reusing the US02
- * detail use case), so an unknown or unavailable Pokémon leaves the store untouched. Races are
- * settled by the store: a lost first-import race becomes a re-sync of the winner, and a stale
- * re-sync is retried once against the latest version.
+ * Imports a Pokémon into the local store or refreshes it. PokeAPI is read first and fresh, never
+ * from the catalog cache (reusing the US02 detail use case), so an unknown or unavailable Pokémon
+ * leaves the store untouched. Races are settled by the store: a lost first-import race becomes a
+ * re-sync of the winner, and a stale re-sync is retried once against the latest version.
  */
 public class SyncPokemonUseCase implements SyncPokemon {
 
@@ -35,7 +35,7 @@ public class SyncPokemonUseCase implements SyncPokemon {
 
   @Override
   public SyncResult sync(PokemonIdentifier identifier, String actor) {
-    PokemonDetail detail = getPokemonDetail.get(identifier);
+    PokemonDetail detail = getPokemonDetail.getFresh(identifier);
     UpstreamData upstream = UpstreamData.from(detail);
     PokemonId pokeapiId = detail.id();
     var stored = repository.findByPokeapiId(pokeapiId);
