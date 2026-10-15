@@ -7,6 +7,7 @@ import { QueryError } from '@/shared/ui/QueryError';
 
 import { CardSkeleton } from './CardSkeleton';
 import { catalogSearch, PAGE_SIZES } from './catalogParams';
+import { catalogReturnState } from './catalogReturn';
 import { FindPokemonForm } from './FindPokemonForm';
 import { PokemonCard } from './PokemonCard';
 import { useCatalogPage } from './useCatalogPage';
@@ -111,7 +112,7 @@ export function CatalogPage() {
           >
             {query.data.content.map((entry) => (
               <li key={entry.id}>
-                <PokemonCard entry={entry} />
+                <PokemonCard entry={entry} linkState={catalogReturnState(page, size)} />
               </li>
             ))}
           </ul>

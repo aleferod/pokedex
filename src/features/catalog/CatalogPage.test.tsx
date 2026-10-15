@@ -4,6 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { problemResponse } from '@/test/authApi';
+import { pokemonDetail } from '@/test/pokemonDetails';
 import { renderRoute } from '@/test/renderRoute';
 import { server } from '@/test/server';
 
@@ -50,6 +51,21 @@ function catalogApi(options: { delayPage?: number } = {}) {
         totalElements: TOTAL,
         totalPages: Math.ceil(TOTAL / size),
       });
+    }),
+  );
+  return requests;
+}
+
+/**
+ * Where the finder leads: Pikachu's page, which loads its detail. Recording the identifiers
+ * asked for shows which address was opened.
+ */
+function pikachuDetailApi() {
+  const requests: string[] = [];
+  server.use(
+    http.get('/api/v1/pokemon/:idOrName', ({ params }) => {
+      requests.push(String(params.idOrName));
+      return HttpResponse.json(pokemonDetail(25, 'pikachu'));
     }),
   );
   return requests;
@@ -226,29 +242,33 @@ describe('catalog page', () => {
     });
   });
 
-  it('finds a Pokémon by name or number', async () => {
+  // The finder's tests wait for the Pokémon's page itself: it loads its detail, so ending at the
+  // address alone would leave that request racing the test's cleanup.
+  it('finds a Pokémon by name and opens its page', async () => {
     const user = userEvent.setup();
     catalogApi();
+    const details = pikachuDetailApi();
     const { router } = renderRoute('/pokemon');
 
     await user.type(await screen.findByLabelText('Find a Pokémon'), 'Pikachu');
     await user.click(screen.getByRole('button', { name: 'Find' }));
 
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/pokemon/pikachu');
-    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Pikachu' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/pokemon/pikachu');
+    expect(details).toEqual(['pikachu']);
   });
 
   it('reads a Pokédex number with leading zeros', async () => {
     const user = userEvent.setup();
     catalogApi();
+    const details = pikachuDetailApi();
     const { router } = renderRoute('/pokemon');
 
     await user.type(await screen.findByLabelText('Find a Pokémon'), '025{Enter}');
 
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/pokemon/25');
-    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Pikachu' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/pokemon/25');
+    expect(details).toEqual(['25']);
   });
 
   it('rejects something that is neither a number nor a name, in place', async () => {

@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router';
 
 import { LoginPage, RegisterPage } from '@/features/auth';
 import { CatalogPage } from '@/features/catalog';
+import { PokemonDetailPage } from '@/features/detail';
 
 import { HomePage } from './HomePage';
 import { Layout } from './Layout';
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, Component: HomePage },
       { path: 'pokemon', Component: CatalogPage },
+      { path: 'pokemon/:idOrName', Component: PokemonDetailPage },
       { path: 'login', Component: LoginPage },
       { path: 'register', Component: RegisterPage },
       { path: '*', Component: NotFoundPage },

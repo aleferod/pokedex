@@ -7,7 +7,7 @@
 
 The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Ballast Lane Java technical exercise. It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
 
-> **Status:** `bootstrap-web`, `add-auth-ui` and `add-catalog-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, registration and sign-in with protected routes, and the paginated catalog (US01). The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
+> **Status:** `bootstrap-web`, `add-auth-ui`, `add-catalog-ui` and `add-detail-ui` are done: the application shell, the API client, quality gates, the Docker image, CI, registration and sign-in with protected routes, the paginated catalog (US01) and the Pokémon detail page with stats and the evolution chain (US02). The remaining screens arrive one OpenSpec change at a time; see [Roadmap](#roadmap).
 
 ## Contents
 
@@ -19,6 +19,7 @@ The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Bal
 - [Talking to the API](#talking-to-the-api)
 - [Authentication](#authentication)
 - [Catalog](#catalog)
+- [Pokémon detail](#pokémon-detail)
 - [Testing and quality gates](#testing-and-quality-gates)
 - [Docker](#docker)
 - [Spec-driven workflow](#spec-driven-workflow)
@@ -141,6 +142,26 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
   - an error with "Try again" (a 503 says PokeAPI is temporarily unavailable)
 - **Find a Pokémon:** a name or Pokédex number, checked with the API's own identifier rule, opens `/pokemon/<id or name>`. The catalog API has no text search, so this is how you jump to a Pokémon; tag and name filters come with the local Pokédex.
 
+## Pokémon detail
+
+`/pokemon/<number or name>` (US02) shows one Pokémon in full:
+
+- the official artwork, `#number`, name and types, one colour each with at least 4.5:1 contrast
+- the category, the description, height in metres, weight in kilograms and abilities
+- the six base stats as a table with bars and a total
+- the evolution family as a tree
+
+How it behaves:
+
+- **Evolution chain:** the tree starts at the base form. Each stage links to its page and says how it's reached ("Level 16", "Use Thunder Stone"). Branching families such as Eevee's show every branch, and the stage on screen is the current page (`aria-current`). A family of one says "Ditto does not evolve."
+- **One address per Pokémon:** `/pokemon/Pikachu` and `/pokemon/025` are replaced by `/pokemon/pikachu` and `/pokemon/25`.
+- **States:**
+  - a skeleton while loading
+  - "Pokémon not found" with the finder, for a 404 or for an identifier the API would reject (that one never calls the API)
+  - "Try again" for other failures, where a 503 says PokeAPI is temporarily unavailable
+- **The way back:** "Back to the catalog" returns to the catalog page and size you came from, even after following the evolution chain. Opened directly, it goes to page 1.
+- **Focus:** after moving to a Pokémon inside the app (a card, a stage), focus goes to its name, so keyboard and screen-reader users start at the new content. In the main navigation, "Catalog" is then the current section (`aria-current="true"`), not the current page.
+
 ## Testing and quality gates
 
 ```bash
@@ -181,7 +202,7 @@ CI runs these jobs on every push and pull request:
 1. ✅ `bootstrap-web`: shell, API client, gates, Docker, CI
 2. ✅ `add-auth-ui`: register, login, token handling, protected routes
 3. ✅ `add-catalog-ui`: the paginated catalog (US01)
-4. `add-detail-ui`: the detail view with stats and the evolution chain (US02)
+4. ✅ `add-detail-ui`: the detail view with stats and the evolution chain (US02)
 5. `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
 6. `add-e2e-and-polish`: Playwright end-to-end tests, the full-stack Compose file, screenshots
 

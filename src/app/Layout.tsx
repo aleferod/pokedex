@@ -1,5 +1,5 @@
 import { useRef, type MouseEvent } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet, useLocation, useMatch } from 'react-router';
 
 import { AuthNav } from '@/features/auth';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
@@ -13,6 +13,9 @@ import { navLinkClass } from '@/shared/ui/navLinkClass';
 export function Layout() {
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
+  // "Catalog" is the current page only on /pokemon; on a Pokémon's page it is the current
+  // section (aria-current="true"), so the evolution stage being viewed is the one current page.
+  const onCatalogPage = useMatch('/pokemon') !== null;
 
   const skipToContent = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -41,7 +44,11 @@ export function Layout() {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/pokemon" className={navLinkClass}>
+                <NavLink
+                  to="/pokemon"
+                  aria-current={onCatalogPage ? 'page' : 'true'}
+                  className={navLinkClass}
+                >
                   Catalog
                 </NavLink>
               </li>
