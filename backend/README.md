@@ -1,13 +1,13 @@
 # Pokédex API
 
-[![CI](https://github.com/aleferod/pokedex-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleferod/pokedex-api/actions/workflows/ci.yml)
+[![CI](https://github.com/aleferod/pokedex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleferod/pokedex/actions/workflows/ci.yml)
 ![Java 21](https://img.shields.io/badge/Java-21-blue)
 ![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-6db33f)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
-A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
+A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). It's the backend of the [Pokédex](../README.md); the frontend, pokedex-web, is in [`frontend/`](../frontend).
 
-> **Status:** complete. The backend changes below are done, and so is the frontend, [pokedex-web](https://github.com/aleferod/pokedex-web), which also runs **the whole product in one command** (see [Quick start](#quick-start)). [docs/PRESENTATION.md](docs/PRESENTATION.md) is the guide for the presentation and code review.
+> **Status:** complete. The backend changes below are done, and so is the frontend in [`frontend/`](../frontend). The repository root runs **the whole product in one command** (see [Quick start](#quick-start)). [docs/PRESENTATION.md](../docs/PRESENTATION.md) is the guide for the presentation and code review.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
@@ -44,7 +44,7 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 - [GenAI exercise and AI use](#genai-exercise-and-ai-use)
 - [Roadmap](#roadmap)
 - [Trade-offs and future improvements](#trade-offs-and-future-improvements)
-- [Presentation and code review](docs/PRESENTATION.md)
+- [Presentation and code review](../docs/PRESENTATION.md)
 
 ## Quick start
 
@@ -68,13 +68,13 @@ docker compose up --build
 - **Stop:** `docker compose down` keeps the data (named volume `pokedex-db-data`). `docker compose down -v` wipes it.
 - **Run the API on the host instead (optional):** start only the database with `docker compose up -d postgres`, then run `./mvnw spring-boot:run`. This needs JDK 21. The default `local` profile reads the same `.env` and connects to `localhost:5433`.
 
-**The whole product (database, this API and the web app) in one command**, from a clone of [pokedex-web](https://github.com/aleferod/pokedex-web):
+**The whole product (database, this API and the web app) in one command**, from the repository root:
 
 ```bash
-cp .env.example .env && docker compose -f docker-compose.full.yml up --build
+cp .env.example .env && docker compose up --build
 ```
 
-The app opens at <http://localhost:8000>, and Swagger UI stays at <http://localhost:8080/swagger-ui.html>. That Compose file builds this API from this repository's `main`; the details are in [pokedex-web's README](https://github.com/aleferod/pokedex-web#run-the-whole-product).
+The app opens at <http://localhost:8000>, and Swagger UI stays at <http://localhost:8080/swagger-ui.html>. That Compose file builds this API and the app from the same checkout; the details are in the [frontend README](../frontend/README.md#run-the-whole-product).
 
 ## Demo data
 
@@ -404,7 +404,7 @@ Every error is an RFC 7807 problem detail (`application/problem+json`) with exac
 
 ```json
 {
-  "type": "https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#not-found",
+  "type": "https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#not-found",
   "title": "Resource not found",
   "status": 404,
   "detail": "No endpoint GET /api/v1/nope.",
@@ -578,18 +578,19 @@ Test names follow `should_<expected>_when_<condition>`, with Given / When / Then
 - line coverage of `domain` + `application` below 85% (JaCoCo)
 - banned dependencies: H2/HSQLDB/Derby and JUnit 4 (Maven Enforcer)
 
-**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push to `main` and every pull request:
+**CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml), one workflow for both apps) runs on every push to `main` and every pull request:
 - build and all tests, with a coverage summary and the HTML report as an artifact
 - `openspec validate --all --strict`
 - a Docker image build
 - a gitleaks secret scan over the full history
+- the frontend's gates, and the end-to-end suite against the full stack built from the same commit, so an API change that breaks the app fails here
 
 ## Spec-driven workflow (OpenSpec)
 
 Every capability is specified before it's built ([ADR-0005](docs/adr/0005-spec-driven-development-with-openspec.md)):
-- **Project context and rules:** [`openspec/config.yaml`](openspec/config.yaml), covering the stack, architecture rules, conventions and Definition of Done.
-- **In-flight changes:** [`openspec/changes/`](openspec/changes). Each has a proposal, a design, tasks (tests first) and delta specs with `SHALL` requirements and `WHEN/THEN` scenarios.
-- **Source of truth after archiving:** [`openspec/specs/`](openspec/specs).
+- **Project context and rules:** [`openspec/config.yaml`](../openspec/config.yaml) at the repository root, shared with the frontend, covering the stack, architecture rules, conventions and Definition of Done.
+- **In-flight changes:** [`openspec/changes/`](../openspec/changes). Each has a proposal, a design, tasks (tests first) and delta specs with `SHALL` requirements and `WHEN/THEN` scenarios.
+- **Source of truth after archiving:** [`openspec/specs/`](../openspec/specs).
 
 The process for each change:
 1. Propose.
@@ -629,15 +630,18 @@ Each item is one OpenSpec change and one pull request:
 7. ✅ `add-caching-resilience`: Caffeine cache, timeouts, retry and circuit breaker
 8. ✅ `add-seed-data`: demo users and 10 local Pokémon
 9. ✅ `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
-10. ✅ `add-presentation-doc`: the presentation and code-review guide ([`docs/PRESENTATION.md`](docs/PRESENTATION.md)), and the full stack from pokedex-web in the quick start
+10. ✅ `add-presentation-doc`: the presentation and code-review guide ([`docs/PRESENTATION.md`](../docs/PRESENTATION.md)), and the full stack from pokedex-web in the quick start
 11. ✅ `add-catalog-name-search`: US01 search by part of a name (`?name=pika`), over a cached index of all names
 12. ✅ `update-guide-for-catalog-search`: the guide's demo and numbers after the search, and the fixed form finding in `docs/GENAI.md`
+13. ✅ `adopt-monorepo`: this API moved into [aleferod/pokedex](../README.md) as `backend/`, next to the web app; one CI, the full stack at the root, and this repository's URL in the `User-Agent` and problem types
+
+Changes 1–12 were pull requests in [aleferod/pokedex-api](https://github.com/aleferod/pokedex-api/pulls?q=is%3Apr+is%3Amerged).
 
 ## Trade-offs and future improvements
 
 - **One module plus ArchUnit, not multi-module Maven.** Easier to read and review. The layering is enforced when tests run, not when code compiles. See ADR-0001.
 - **Empty `V1__baseline.sql`.** Tables arrive with the feature that needs them, so the history reads one capability per change.
-- **Squash merges.** `main` stays linear. The red/green TDD commits remain visible in each pull request.
+- **Squash merges.** `main` stays linear. The red/green TDD commits remain visible in each pull request: in [aleferod/pokedex-api](https://github.com/aleferod/pokedex-api/pulls?q=is%3Apr+is%3Amerged) for the changes before the move to this repository.
 - **409 instead of 412 for a stale `If-Match`.** The exercise asks for 409. The 412 problem type stays documented but isn't returned.
 - **Native SQL for the local list.** The tag filter uses PostgreSQL array containment so the GIN index serves it. That ties the query to PostgreSQL, which is the only database, and Testcontainers runs the real one. `name` matches the PokeAPI name only; searching localized names is future work.
 - **In-process cache.** Each instance has its own cache, and catalog data can be up to one TTL old (the local replica always reads fresh). A shared Redis cache behind the same Decorator is the next step (ADR-0003).
@@ -652,4 +656,4 @@ Each item is one OpenSpec change and one pull request:
 
 ## License
 
-[MIT](LICENSE)
+[MIT](../LICENSE)

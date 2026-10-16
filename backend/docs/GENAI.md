@@ -170,7 +170,7 @@ The model was Claude (Opus 5.5, through Claude Code), the same assistant that bu
 | 11 | review test | assigned UUID ids and a primitive `@Version` | `TaskEntity implements Persistable`, new until persisted or loaded | Spring Data couldn't tell a new task from a detached one and merged it, adding a SELECT before every INSERT (3 statements per create instead of 2) |
 | 12 | review test | JPQL `(:dueBefore is null or t.dueDate < :dueBefore)` | JPA Specifications, added only for the filters given | PostgreSQL can't type a null bind parameter there, so `?dueBefore=…` without `status` answered **500** |
 
-**The secret scan also flagged the generated tests.** They hard-code two test-only HMAC signing secrets, and gitleaks' generic rule flags both. They aren't credentials, and the raw-output commit has to stay unmodified, so [`.gitleaks.toml`](../.gitleaks.toml) allowlists exactly those two strings under `docs/genai-sample/src/test/`. I checked that any other secret placed there is still caught.
+**The secret scan also flagged the generated tests.** They hard-code two test-only HMAC signing secrets, and gitleaks' generic rule flags both. They aren't credentials, and the raw-output commit has to stay unmodified, so [`.gitleaks.toml`](../../.gitleaks.toml) allowlists exactly those two strings under `docs/genai-sample/src/test/`. I checked that any other secret placed there is still caught.
 
 **Patterns in the mistakes:**
 - **Defects 1–6 come from version drift.** The model wrote Spring Boot 3 / Testcontainers 1 idioms for a Boot 4 / Testcontainers 2 project, even though the prompt named the version. A compiler and a real dependency tree catch these immediately. A reviewer reading the code would mostly not.
@@ -203,6 +203,8 @@ The model was Claude (Opus 5.5, through Claude Code), the same assistant that bu
 
 The whole project was built with an AI pair (Claude Code), with me in charge of scope, decisions and review. The AI wrote most of the code, tests and documents. The guardrails below are what kept that honest.
 
+The two apps were built in their own repositories, [aleferod/pokedex-api](https://github.com/aleferod/pokedex-api) and [aleferod/pokedex-web](https://github.com/aleferod/pokedex-web), whose pull requests show each change's red/green commits. They were then moved into this repository with their history (`adopt-monorepo`).
+
 ### Guardrails
 
 - **Spec first (OpenSpec).** Every change started as `openspec/changes/<id>/` with four files:
@@ -211,7 +213,7 @@ The whole project was built with an AI pair (Claude Code), with me in charge of 
   - a task list with a "Verify:" line per task
   - spec deltas whose requirements have WHEN/THEN scenarios
 
-  `openspec validate --strict` gated each proposal and ran in CI. The archive step, the last commit of each PR, merged the deltas into [`openspec/specs/`](../openspec/specs): 18 capabilities here, plus 8 in [pokedex-web](https://github.com/aleferod/pokedex-web/tree/main/openspec/specs). When implementation showed a spec or design was wrong, the document was corrected in the same PR, as the examples below show.
+  `openspec validate --strict` gated each proposal and ran in CI. The archive step, the last commit of each PR, merged the deltas into [`openspec/specs/`](../../openspec/specs): 27 capabilities, 18 for the API, 8 for the web app and one for the repository's layout. When implementation showed a spec or design was wrong, the document was corrected in the same PR, as the examples below show.
 - **Test first, and red for the right reason.** Each task pair was a failing `test:` commit (red on assertions, against stubs) and then a `feat:` commit. Every test that passed while still red was inspected, which caught several vacuous tests. Acceptance tests written after the code were mutation-checked: removing `@BatchSize`, the cache Decorator or the retries made them fail.
 - **Machine checks over opinions.**
   - `-Werror`, Spotless and JaCoCo (domain and application coverage ≥ 85 %, actually 100 %)
@@ -220,7 +222,7 @@ The whole project was built with an AI pair (Claude Code), with me in charge of 
   - gitleaks
 - **Docker-only verification.** The whole build ran in containers, as on CI.
 - **Checks outside the test suite.** Every change was also checked from a fresh clone with `docker compose up --build` against the real PokeAPI. That run caught things the test suite couldn't, such as the `.gitignore` bug below.
-- **A real browser, then end-to-end tests.** Each frontend change was checked by hand in a real browser against a real backend. Those checks found bugs that jsdom couldn't show, such as a sign-out race and a misleading `aria-current`. The last change turned them into Playwright journeys with axe, run against a fresh full stack in CI ([pokedex-web e2e](https://github.com/aleferod/pokedex-web/tree/main/e2e)).
+- **A real browser, then end-to-end tests.** Each frontend change was checked by hand in a real browser against a real backend. Those checks found bugs that jsdom couldn't show, such as a sign-out race and a misleading `aria-current`. The last change turned them into Playwright journeys with axe, run against a fresh full stack in CI ([pokedex-web e2e](../../frontend/e2e)).
 - **Human checkpoints.** The AI had to stop and ask before anything irreversible or out of scope. Examples:
   - **Spring Boot 4.1:** chosen over the prompt's 3.x because 3.5's open-source support had ended; I approved it (ADR-0006).
   - **409 vs 412:** I chose 409 for a stale `If-Match`, as the brief says, over RFC 9110's 412.
@@ -257,7 +259,7 @@ Every one of these really happened. Each is listed with the change it happened i
 | add-catalog-name-search | A controller test put `?name=mr%20mime` in MockMvc's URI template, which encodes it again, so the server received a literal `%20` | a failing test on the way to green | the value passed with `queryParam` |
 | add-catalog-name-search | The "name list is read once" test searched `ivy` second, which also matches snivy (#495), a Pokémon with no WireMock fixture | the integration test, which uses PokeAPI's real list of 1,351 names | it searches `ivysaur`. A made-up name list would have hidden this. |
 
-In [pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's description has the details):
+In the web app, built in [aleferod/pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's description has the details):
 
 | Change | What the AI got wrong | Caught by | Fix |
 |---|---|---|---|
@@ -282,13 +284,21 @@ In [pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's d
 | add-catalog-search-ui | Search tests read the result cards once, but after the URL changes the previous results stay on screen for a render before the new request starts | intermittent failures while going green | a helper that waits for the expected names; the suites then passed three times on one CPU |
 | add-catalog-search-ui | Kept Testing Library's default 1 s wait. Under coverage on a busy machine, a test file's cold first render took 1.4 s | a coverage run after rebasing | `findBy`/`waitFor` wait up to 3 s; a real failure still fails, later |
 
+While moving both apps into this repository:
+
+| Change | What the AI got wrong | Caught by | Fix |
+|---|---|---|---|
+| adopt-monorepo | Told me the history import would keep the red/green commits that the docs quote. Those were never on `main`, because pull requests were squash-merged; they stay in the original pull requests | checking the quoted commits after the import | corrected with me before going further; the docs keep linking the original pull requests |
+| adopt-monorepo | Two rules in the merged OpenSpec config began with `Backend:` and `Frontend:`, which YAML reads as key/value pairs, so OpenSpec ignored them | OpenSpec's warning on the next validation | rephrased in the change's first commit |
+| adopt-monorepo | A commit took along renames staged earlier for other steps, since `git commit` records the whole index | reading the commit's file list before pushing | the unpushed commits redone, one step each |
+
 Two fixes were to the build prompt this project started from, rather than to the AI's code, and were applied before any work began:
 - `docker run … node:22-alpine npm ci && npm test` would run `npm test` on the host, not in the container. It became `sh -c "npm ci && npm test"`.
 - `git log -p | grep -i token` as the secret check gives false hits on `TokenPort` and JWT code. It became gitleaks plus a grep for real GitHub token prefixes.
 
 Not every problem was the AI's code:
 - One finding is still open: Spring Security 7's default `/.well-known/oauth-protected-resource` metadata claims `tls_client_certificate_bound_access_tokens: true`, which this API doesn't support. It's reported, not changed.
-- One finding has been fixed since it was recorded. In pokedex-web's forms, a mouse user who clicked a submit button such as **Save** right after leaving an invalid field saw that field's error appear. The error moved the button, so that click didn't submit, and focus reached the first problem only on a second click. It was found while walking [the presentation's demo](PRESENTATION.md#the-demo).
+- One finding has been fixed since it was recorded. In pokedex-web's forms, a mouse user who clicked a submit button such as **Save** right after leaving an invalid field saw that field's error appear. The error moved the button, so that click didn't submit, and focus reached the first problem only on a second click. It was found while walking [the presentation's demo](../../docs/PRESENTATION.md#the-demo).
   - **The fix** ([`fix-submit-after-blur`](https://github.com/aleferod/pokedex-web/pull/7)): the shared submit button cancels `mousedown`, so pressing it keeps focus in the field and nothing moves before the click lands. An end-to-end test holds the click for 150 ms, as a person does, and failed before the fix.
   - **Not the candidate fix:** the record suggested validating on submit and then on change. That would have dropped the errors shown on leaving a field, such as registration's password rules, and fixed only the forms it was applied to.
 - A few were process slips:

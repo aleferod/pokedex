@@ -16,8 +16,8 @@
 
 ## 4. Docs
 
-- [ ] 4.1 Write the root README (D7).
-- [ ] 4.2 Move `backend/docs/PRESENTATION.md` to `docs/PRESENTATION.md` and make its links relative; update the backend and frontend READMEs and `backend/docs/GENAI.md`. Verify: lychee finds no broken links (relative offline, GitHub online); no living document links one app to the other through GitHub.
+- [x] 4.1 Write the root README (D7).
+- [x] 4.2 Move `backend/docs/PRESENTATION.md` to `docs/PRESENTATION.md` and make its links relative; update the backend and frontend READMEs and `backend/docs/GENAI.md`. Verify: lychee finds no broken links (relative offline, GitHub online); no living document links one app to the other through GitHub.
 
 ## 5. Verification
 
