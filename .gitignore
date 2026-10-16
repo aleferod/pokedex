@@ -1,0 +1,23 @@
+# Each app has its own .gitignore too: backend/.gitignore (Maven, IDEs) and frontend/.gitignore
+# (node_modules, build and test output). These rules apply to the whole repository.
+
+# Secrets & local env (commit .env.example only)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local tooling
+.claude/settings.local.json
