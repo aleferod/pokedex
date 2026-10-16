@@ -12,7 +12,7 @@
 
 ## 3. One CI workflow
 
-- [ ] 3.1 Write `.github/workflows/ci.yml` with every job of both former workflows (D5); remove `backend/.github/`, `frontend/.github/` and `backend/.gitleaks.toml`. Verify: the workflow is valid YAML, and on the pull request every job runs and passes.
+- [x] 3.1 Write `.github/workflows/ci.yml` with every job of both former workflows (D5); remove `backend/.github/`, `frontend/.github/` and `backend/.gitleaks.toml`. Verify: the workflow is valid YAML, and on the pull request every job runs and passes.
 
 ## 4. Docs
 
