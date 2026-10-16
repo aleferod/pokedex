@@ -1,6 +1,6 @@
 # Presentation and code review guide
 
-A guide for presenting the Pokédex (this API and [pokedex-web](https://github.com/aleferod/pokedex-web)) in about 30 minutes, then reviewing the code. Every number says how to reproduce it, and every claim links to the code or document behind it. It was written on 2026-10-15, after the API's 9 feature changes and pokedex-web's 6 were merged. This guide is the API's 10th change.
+A guide for presenting the Pokédex (this API and [pokedex-web](https://github.com/aleferod/pokedex-web)) in about 30 minutes, then reviewing the code. Every number says how to reproduce it, and every claim links to the code or document behind it. It was written on 2026-10-15 as the API's 10th change, and updated on 2026-10-16 for the catalog search, with pokedex-api's 11 changes and pokedex-web's 8 merged.
 
 ## Contents
 
@@ -34,7 +34,7 @@ Then the code review, starting from the [entry points](#code-review-entry-points
    cp .env.example .env && docker compose -f docker-compose.full.yml up --build --wait
    ```
    The app is at <http://localhost:8000> and Swagger UI at <http://localhost:8080/swagger-ui.html>.
-2. Warm the API's cache: open catalog pages 1–3, then Eevee (`/pokemon/133`) and Pikachu (`/pokemon/25`). Later visits come from the Caffeine cache, so the demo doesn't wait on PokeAPI.
+2. Warm the API's cache by walking demo steps 1 and 2 once. That loads the pages, the index of all names and the Pokémon the demo opens. For the next hour they come from the Caffeine cache, so the demo doesn't wait on PokeAPI.
 3. Open two browser windows for step 5 (the session lives in `sessionStorage`, one per tab).
 4. Keep the fallbacks at hand:
    - the [screenshots](https://github.com/aleferod/pokedex-web#screenshots)
@@ -48,9 +48,11 @@ The demo accounts come from the demo data: `trainer / Trainer@123` (USER) and `a
    - **Say:** the URL is the state, so views can be shared.
    - **Say:** the API builds each page from PokeAPI with a bounded fan-out on virtual threads ([`BoundedFanOut`](../src/main/java/com/ballastlane/pokedex/adapter/out/pokeapi/BoundedFanOut.java)) behind a cache Decorator ([`CachingPokemonCatalog`](../src/main/java/com/ballastlane/pokedex/adapter/out/cache/CachingPokemonCatalog.java)).
    - **Say:** the frontend shows the current page while it fetches the next.
-2. **Detail (US02).** On page 4 (at 40 per page), open Eevee's card (#133). Typing `eevee` in **Find a Pokémon** also works, but then the way back starts at page 1.
+   - **Search:** type `pi` in **Find a Pokémon**. Nothing happens yet: the hint asks for 3 letters. Add `ka`. After a short pause the grid shows the 17 Pokémon whose name contains `pika`, Pikachu first, and the URL becomes `/pokemon?size=40&name=pika`. Focus stays in the field.
+   - **Say:** PokeAPI can't search, so the API filters a cached index of all names and fetches only the matching page's entries ([`ListPokemonUseCase`](../src/main/java/com/ballastlane/pokedex/application/usecase/pokemon/ListPokemonUseCase.java)). The browser waits for a pause in the typing and replaces the history entry, so Back doesn't step through each letter.
+2. **Detail (US02).** Search `eevee` and open Eevee's card (#133). A number works too: `133` and Enter opens Eevee.
    - Show the stats table and the evolution tree with its 8 branches and their conditions. Follow **Sylveon**: focus moves to its name.
-   - **Back to the catalog** returns to the page you came from.
+   - **Back to the catalog** returns to where you came from: the search, or the catalog page if you came from a page.
    - **Say:** each condition is built by a Strategy chosen per PokeAPI trigger ([`EvolutionConditions`](../src/main/java/com/ballastlane/pokedex/adapter/out/pokeapi/evolution/EvolutionConditions.java)), and the chain stays a tree.
 3. **The local replica (US03), as `trainer`.** Open **My Pokédex**: you're sent to sign in and come back.
    - Filter by the tag `starter`, then follow a tag chip.
@@ -103,6 +105,7 @@ flowchart LR
 | 409, not 412, for a stale `If-Match`; 428 without one | the brief asks for 409 | [README trade-offs](../README.md#trade-offs-and-future-improvements) |
 | JSON Merge Patch with a tri-state field (keep, clear, set) | an absent member keeps its value and `null` clears it; read-only members are rejected by name | [`MergePatchReader`](../src/main/java/com/ballastlane/pokedex/adapter/in/web/localpokemon/MergePatchReader.java) |
 | `If-Match` from the version the user saw; the edit form keeps its loaded version | a background refetch must not turn a stale edit into an overwrite | [local UI design D3 and D9](https://github.com/aleferod/pokedex-web/blob/main/openspec/changes/archive/2026-10-15-add-local-pokemon-management-ui/design.md) |
+| Search by part of a name, over a cached index of all names; at least 3 characters; the browser searches after a 300 ms pause | PokeAPI has no search; the index is one cached request, and only the matching page is fetched in detail; containment in Pokédex order puts the main form first; the URL is replaced while typing, so Back skips each letter | [API search design D2–D4](../openspec/changes/archive/2026-10-15-add-catalog-name-search/design.md), [search UI design D2](https://github.com/aleferod/pokedex-web/blob/main/openspec/changes/archive/2026-10-16-add-catalog-search-ui/design.md) |
 | Tags edited optimistically, rolled back on refusal | instant feedback, with one change in flight at a time | the same design, D8 |
 | The end-to-end suite uses the real PokeAPI | it also exercises the cache, retries and breaker; an outage is an honest failure | [e2e design D5](https://github.com/aleferod/pokedex-web/blob/main/openspec/changes/archive/2026-10-15-add-e2e-and-polish/design.md) |
 
@@ -110,13 +113,13 @@ flowchart LR
 
 | What | Result | Reproduce |
 |---|---|---|
-| API unit and slice tests | **519** | `./scripts/verify-in-docker.sh` (needs only Docker) |
-| API integration tests (Testcontainers PostgreSQL, WireMock with real PokeAPI captures) | **63** | the same command |
-| API line coverage, domain + application | **100 %** (the gate is 85 %); the whole code base 97.9 % | `./scripts/coverage-summary.sh` after a verify |
+| API unit and slice tests | **556** | `./scripts/verify-in-docker.sh` (needs only Docker) |
+| API integration tests (Testcontainers PostgreSQL, WireMock with real PokeAPI captures) | **68** | the same command |
+| API line coverage, domain + application | **100 %** (the gate is 85 %); the whole code base 98.0 % | `./scripts/coverage-summary.sh` after a verify |
 | API build gates | `-Xlint:all -Werror`, Spotless, ArchUnit, JaCoCo, Maven Enforcer | part of `verify` |
-| Web unit tests (Vitest, React Testing Library, MSW) | **215**; coverage 98.4 % statements, 89.6 % branches, 98.9 % functions, 98.3 % lines (gate 85/80) | `./scripts/npm-in-docker.sh run test:coverage` in pokedex-web |
+| Web unit tests (Vitest, React Testing Library, MSW) | **231**; coverage 98.4 % statements, 90.4 % branches, 98.9 % functions, 98.3 % lines (gate 85/80) | `./scripts/npm-in-docker.sh run test:coverage` in pokedex-web |
 | Web gates | ESLint with zero warnings (type-aware), Prettier, strict TypeScript; **any `console.error`/`warn` fails a test**; an unmocked request fails a test | the same, and CI |
-| End-to-end, real stack | **10 tests**, including axe (WCAG 2.1 A/AA) on every main page with no violations | `./scripts/e2e.sh` in pokedex-web |
+| End-to-end, real stack | **12 tests**, including axe (WCAG 2.1 A/AA) on every main page with no violations | `./scripts/e2e.sh` in pokedex-web |
 | Specs | **18 capabilities** here (with this guide's) **+ 8** in pokedex-web, all valid | `openspec validate --all --strict` in each repository |
 | Secrets | gitleaks over the full history of both repositories | CI |
 
@@ -134,6 +137,7 @@ flowchart LR
 | [`LocalPokemon`](../src/main/java/com/ballastlane/pokedex/domain/localpokemon/LocalPokemon.java) | the aggregate: upstream data vs proprietary data, import and re-sync |
 | [`ProprietaryData`](../src/main/java/com/ballastlane/pokedex/domain/localpokemon/ProprietaryData.java) | the Notification pattern: every broken rule in one 400 |
 | [`MergePatchReader`](../src/main/java/com/ballastlane/pokedex/adapter/in/web/localpokemon/MergePatchReader.java) and [`IfMatch`](../src/main/java/com/ballastlane/pokedex/adapter/in/web/localpokemon/IfMatch.java) | merge patch, read-only members, and the version check |
+| [`PokemonNameQuery`](../src/main/java/com/ballastlane/pokedex/domain/pokemon/PokemonNameQuery.java) and [`ListPokemonUseCase`](../src/main/java/com/ballastlane/pokedex/application/usecase/pokemon/ListPokemonUseCase.java) | the search's rule as a value object, and a page of matches that fetches only that page's entries |
 | [`SyncPokemonUseCase`](../src/main/java/com/ballastlane/pokedex/application/usecase/localpokemon/SyncPokemonUseCase.java) | a use case with no framework, behind its ports |
 | [`CachingPokemonCatalog`](../src/main/java/com/ballastlane/pokedex/adapter/out/cache/CachingPokemonCatalog.java) and [`PokeApiResilience`](../src/main/java/com/ballastlane/pokedex/adapter/out/pokeapi/PokeApiResilience.java) | the Decorator, retries with jitter, and the circuit breaker |
 | [`JwtTokenIssuer`](../src/main/java/com/ballastlane/pokedex/adapter/out/security/JwtTokenIssuer.java) and [`PasswordPolicy`](../src/main/java/com/ballastlane/pokedex/domain/user/password/PasswordPolicy.java) | tokens and the password rule chain |
@@ -145,6 +149,8 @@ flowchart LR
 |---|---|
 | [`client.ts`](https://github.com/aleferod/pokedex-web/blob/main/src/shared/api/client.ts) and [`ApiError.ts`](https://github.com/aleferod/pokedex-web/blob/main/src/shared/api/ApiError.ts) | one client and one error type, built from the API's problems |
 | [`AuthProvider.tsx`](https://github.com/aleferod/pokedex-web/blob/main/src/features/auth/AuthProvider.tsx) and [`AuthNav.tsx`](https://github.com/aleferod/pokedex-web/blob/main/src/features/auth/AuthNav.tsx) | `useLayoutEffect` so the first query carries the token; `flushSync` so signing out never bounces to sign-in |
+| [`FindPokemonForm.tsx`](https://github.com/aleferod/pokedex-web/blob/main/src/features/catalog/FindPokemonForm.tsx) | search as you type: the pause, the URL replaced, and a field that follows the URL only when it changes from outside (Back, "Clear search") |
+| [`SubmitButton.tsx`](https://github.com/aleferod/pokedex-web/blob/main/src/shared/ui/form/SubmitButton.tsx) | why pressing a submit button keeps focus in the field: otherwise the field's errors move the button and the click is lost |
 | [`useLocal.ts`](https://github.com/aleferod/pokedex-web/blob/main/src/features/local/useLocal.ts) | queries, mutations, and the optimistic tag change with rollback |
 | [`LocalEditPage.tsx`](https://github.com/aleferod/pokedex-web/blob/main/src/features/local/LocalEditPage.tsx) | the edit form that keeps its loaded version, and the 409 flow |
 | [`rules.ts`](https://github.com/aleferod/pokedex-web/blob/main/src/features/local/rules.ts) | the API's rules mirrored with its messages (Zod 4) |
@@ -154,7 +160,7 @@ flowchart LR
 
 ## How it was built
 
-- **Spec-first:** each change (10 here, including this guide, and 6 in pokedex-web) started as an OpenSpec proposal with a design, tasks and spec deltas, and was validated in CI. Its pull request ends with the archive commit. The archives are in `openspec/changes/archive/` in [this repository](../openspec/changes/archive) and in [pokedex-web](https://github.com/aleferod/pokedex-web/tree/main/openspec/changes/archive).
+- **Spec-first:** each change (12 here, including this guide and its update, and 8 in pokedex-web) started as an OpenSpec proposal with a design, tasks and spec deltas, and was validated in CI. Its pull request ends with the archive commit. The archives are in `openspec/changes/archive/` in [this repository](../openspec/changes/archive) and in [pokedex-web](https://github.com/aleferod/pokedex-web/tree/main/openspec/changes/archive).
 - **Test-first:**
   - red `test:` commits before green ones
   - tests that passed at red were inspected, which caught several vacuous ones
@@ -170,6 +176,7 @@ flowchart LR
   - Calls that aren't cached fail fast with 503 and `Retry-After` while the breaker is open.
   - The local replica doesn't depend on PokeAPI at all.
   - Next step: serve stale entries if PokeAPI errors ([README trade-offs](../README.md#trade-offs-and-future-improvements)).
+- **Why not ask PokeAPI to search?** Its REST API looks Pokémon up by exact name or number only. The API reads PokeAPI's list of all names once, in one request of about 90 KB, caches it for an hour like a page, filters it, and fetches only the matching page's entries ([README](../README.md#catalog-us01)).
 - **Two users edit the same record?** The second write carries an older version and gets 409. The UI explains, keeps the input, and offers the latest version. Try it in [step 5](#the-demo).
 - **Why `sessionStorage` for the token?** Both web storages are readable by injected script, so the real defence is having no XSS sinks. One tab and at most one hour limit the exposure, and HttpOnly cookies would need CSRF handling and backend work ([ADR-0002](adr/0002-stateless-jwt-authentication.md)).
 - **How do you know the tests test something?** Red first, inspecting anything that passed at red, and mutation checks. For example, removing the cache Decorator, the retries or the `flushSync` fix makes the tests fail.

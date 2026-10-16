@@ -254,6 +254,8 @@ Every one of these really happened. Each is listed with the change it happened i
 | add-caching-resilience | Planned Caffeine's async mode, which runs loaders off the request thread and would lose the correlation id | design review | synchronous cache; trade-off documented |
 | add-caching-resilience | Expected exactly 3 requests on connection resets; the JDK HTTP client replays an idempotent GET once by itself (6 requests) | test | attempts counted with status-based failures |
 | add-caching-resilience, add-seed-data | More tests that passed vacuously at red (loops over a stub's empty lists) | checking what passes at red | tests require the expected sizes first |
+| add-catalog-name-search | A controller test put `?name=mr%20mime` in MockMvc's URI template, which encodes it again, so the server received a literal `%20` | a failing test on the way to green | the value passed with `queryParam` |
+| add-catalog-name-search | The "name list is read once" test searched `ivy` second, which also matches snivy (#495), a Pokémon with no WireMock fixture | the integration test, which uses PokeAPI's real list of 1,351 names | it searches `ivysaur`. A made-up name list would have hidden this. |
 
 In [pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's description has the details):
 
@@ -275,15 +277,25 @@ In [pokedex-web](https://github.com/aleferod/pokedex-web) (each pull request's d
 | add-e2e-and-polish | `@axe-core/playwright`'s open peer range pulled a second, newer `playwright-core` | the type-check | `playwright-core` pinned to Playwright's version |
 | add-e2e-and-polish | An accessibility check waited for a record count that another test file changed in parallel | a flaky fresh-clone run (it passed on retry) | it waits for a record no test deletes, and three runs pass without retries |
 | add-e2e-and-polish | Committed `docker-compose.full.yml` without running the format gate | the next gate run | formatted in the next commit |
+| add-catalog-search-ui | Wrote red-phase stubs that marked an unused parameter with `void name;` | type-aware lint (`no-meaningless-void-operator`) | stubs that use the parameter wrongly (`?q=`), so the tests fail on their assertions |
+| add-catalog-search-ui | Typed the search form's submit handler with `FormEvent`, deprecated in React 19's types | type-aware lint (`no-deprecated`) | `SubmitEvent` |
+| add-catalog-search-ui | Search tests read the result cards once, but after the URL changes the previous results stay on screen for a render before the new request starts | intermittent failures while going green | a helper that waits for the expected names; the suites then passed three times on one CPU |
+| add-catalog-search-ui | Kept Testing Library's default 1 s wait. Under coverage on a busy machine, a test file's cold first render took 1.4 s | a coverage run after rebasing | `findBy`/`waitFor` wait up to 3 s; a real failure still fails, later |
 
 Two fixes were to the build prompt this project started from, rather than to the AI's code, and were applied before any work began:
 - `docker run … node:22-alpine npm ci && npm test` would run `npm test` on the host, not in the container. It became `sh -c "npm ci && npm test"`.
 - `git log -p | grep -i token` as the secret check gives false hits on `TokenPort` and JWT code. It became gitleaks plus a grep for real GitHub token prefixes.
 
 Not every problem was the AI's code:
-- Two findings are still open:
-  - Spring Security 7's default `/.well-known/oauth-protected-resource` metadata claims `tls_client_certificate_bound_access_tokens: true`, which this API doesn't support. It's reported, not changed.
-  - In pokedex-web's record forms, a mouse user who clicks **Save** right after leaving an invalid field sees that field's error appear. The error moves the button, so that click doesn't submit. Nothing is sent either way and the errors show, but focus doesn't move to the first problem until a second click. It was found while walking [the presentation's demo](PRESENTATION.md#the-demo). A candidate fix is validating on submit and then on change, instead of on leaving a field.
-- A few were process slips, such as a scripted multi-file edit that stopped halfway on a misread file layout. The script's own assertion caught it, and the edit was re-applied.
+- One finding is still open: Spring Security 7's default `/.well-known/oauth-protected-resource` metadata claims `tls_client_certificate_bound_access_tokens: true`, which this API doesn't support. It's reported, not changed.
+- One finding has been fixed since it was recorded. In pokedex-web's forms, a mouse user who clicked a submit button such as **Save** right after leaving an invalid field saw that field's error appear. The error moved the button, so that click didn't submit, and focus reached the first problem only on a second click. It was found while walking [the presentation's demo](PRESENTATION.md#the-demo).
+  - **The fix** ([`fix-submit-after-blur`](https://github.com/aleferod/pokedex-web/pull/7)): the shared submit button cancels `mousedown`, so pressing it keeps focus in the field and nothing moves before the click lands. An end-to-end test holds the click for 150 ms, as a person does, and failed before the fix.
+  - **Not the candidate fix:** the record suggested validating on submit and then on change. That would have dropped the errors shown on leaving a field, such as registration's password rules, and fixed only the forms it was applied to.
+- A few were process slips:
+  - A scripted multi-file edit stopped halfway on a misread file layout. The script's own assertion caught it, and the edit was re-applied.
+  - An archive commit message kept a `<date>` placeholder. It was caught and amended before pushing.
+  - Two archive commit messages are wrong. Each was left alone rather than force-pushed, and its pull request's description says so:
+    - `add-catalog-name-search`'s says "19 of 19" specs pass, a count taken while the change was still open. After archiving there are 18, all valid.
+    - `add-catalog-search-ui`'s calls the `pokemon-detail-ui` spec "pokedex-detail-ui".
 
 **The lesson:** the AI is fast and usually right about the shape of a solution, and most often wrong about version-specific details and edge cases. Each guardrail above caught at least one real defect. Most were caught by the cheap mechanical checks (compiler, red-first tests, fresh clones), and the rest by deliberate review.

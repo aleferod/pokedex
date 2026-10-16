@@ -7,7 +7,7 @@
 
 A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technical exercise. It browses Pokémon from [PokeAPI](https://pokeapi.co/docs/v2), keeps a local PostgreSQL replica with proprietary fields, and lets authenticated users manage that replica. It follows **Clean / Hexagonal Architecture** and is built **test-first** and **spec-first** with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The frontend lives in [pokedex-web](https://github.com/aleferod/pokedex-web).
 
-> **Status:** complete. The nine backend changes below are done, and so is the frontend, [pokedex-web](https://github.com/aleferod/pokedex-web), which also runs **the whole product in one command** (see [Quick start](#quick-start)). [docs/PRESENTATION.md](docs/PRESENTATION.md) is the guide for the presentation and code review.
+> **Status:** complete. The backend changes below are done, and so is the frontend, [pokedex-web](https://github.com/aleferod/pokedex-web), which also runs **the whole product in one command** (see [Quick start](#quick-start)). [docs/PRESENTATION.md](docs/PRESENTATION.md) is the guide for the presentation and code review.
 > - `bootstrap-project`: the platform foundation (error contract, correlation ids, CORS, health/info/OpenAPI, migrations, quality gates, Docker, CI).
 > - `add-user-auth`: registration, JWT login and public vs protected routes.
 > - `add-pokemon-catalog`: US01, the paginated catalog from PokeAPI.
@@ -17,6 +17,8 @@ A REST API built with Java 21 and Spring Boot for the Ballast Lane Java technica
 > - `add-caching-resilience`: a Caffeine cache in front of PokeAPI, plus retries and a circuit breaker on every PokeAPI request.
 > - `add-seed-data`: demo accounts and ten local Pokémon, created at startup when demo data is enabled.
 > - `add-genai-task-api-doc`: the GenAI exercise ([docs/GENAI.md](docs/GENAI.md)), with a generated Task API sample that CI builds and tests.
+> - `add-presentation-doc` and `update-guide-for-catalog-search`: the presentation and code-review guide.
+> - `add-catalog-name-search`: searching the catalog by part of a name, which pokedex-web uses to search as you type.
 >
 > See [Roadmap](#roadmap).
 
@@ -628,6 +630,8 @@ Each item is one OpenSpec change and one pull request:
 8. ✅ `add-seed-data`: demo users and 10 local Pokémon
 9. ✅ `add-genai-task-api-doc`: the GenAI exercise write-up (`docs/GENAI.md`)
 10. ✅ `add-presentation-doc`: the presentation and code-review guide ([`docs/PRESENTATION.md`](docs/PRESENTATION.md)), and the full stack from pokedex-web in the quick start
+11. ✅ `add-catalog-name-search`: US01 search by part of a name (`?name=pika`), over a cached index of all names
+12. ✅ `update-guide-for-catalog-search`: the guide's demo and numbers after the search, and the fixed form finding in `docs/GENAI.md`
 
 ## Trade-offs and future improvements
 
