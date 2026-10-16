@@ -2,7 +2,7 @@
 
 ## 1. The API's repository URLs (backend)
 
-- [ ] 1.1 Red: `ProblemTypesDocumentedTest` pins `app.problems.base-uri` to `https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#`, and `PokeApiPropertiesTest` pins the default user agent (fallback and `application.yml`) to name `https://github.com/aleferod/pokedex`. Verify: the tests fail on the old URLs.
+- [x] 1.1 Red: `ProblemTypesDocumentedTest` pins `app.problems.base-uri` to `https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#`, and `PokeApiPropertiesTest` pins the default user agent (fallback and `application.yml`) to name `https://github.com/aleferod/pokedex`. Verify: the tests fail on the old URLs.
 - [ ] 1.2 Green: update `application.yml`, `PokeApiProperties`, `pom.xml`'s `<url>` and the example in `docs/problems.md`; update pokedex-web's problem fixtures. Verify: `backend/scripts/verify-in-docker.sh` passes; the frontend tests pass.
 
 ## 2. The full stack at the root

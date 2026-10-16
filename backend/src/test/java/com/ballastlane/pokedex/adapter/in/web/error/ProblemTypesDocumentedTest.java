@@ -43,7 +43,8 @@ class ProblemTypesDocumentedTest {
 
     // Then
     assertThat(properties).isNotNull();
-    assertThat(properties.getProperty("app.problems.base-uri")).endsWith("/docs/problems.md#");
+    assertThat(properties.getProperty("app.problems.base-uri"))
+        .isEqualTo("https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#");
   }
 
   /** Anchors as GitHub renders them for markdown headings. */
