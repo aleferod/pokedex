@@ -5,7 +5,7 @@ import type { Session } from '@/features/auth';
 import { server } from './server';
 import { testSession } from './sessions';
 
-const PROBLEM = 'https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#';
+const PROBLEM = 'https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#';
 
 /** An RFC 7807 answer as pokedex-api sends it. */
 export function problemResponse(

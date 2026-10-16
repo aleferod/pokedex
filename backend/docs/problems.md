@@ -16,7 +16,7 @@ Every response also carries an `X-Correlation-Id` header. Quote it when reportin
 
 ```json
 {
-  "type": "https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#not-found",
+  "type": "https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#not-found",
   "title": "Resource not found",
   "status": 404,
   "detail": "No endpoint GET /api/v1/does-not-exist.",
