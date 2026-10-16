@@ -117,7 +117,7 @@ flowchart LR
 | API integration tests (Testcontainers PostgreSQL, WireMock with real PokeAPI captures) | **68** | the same command |
 | API line coverage, domain + application | **100 %** (the gate is 85 %); the whole code base 98.0 % | `backend/scripts/coverage-summary.sh` after a verify |
 | API build gates | `-Xlint:all -Werror`, Spotless, ArchUnit, JaCoCo, Maven Enforcer | part of `verify` |
-| Web unit tests (Vitest, React Testing Library, MSW) | **231**; coverage 98.4 % statements, 90.4 % branches, 98.9 % functions, 98.3 % lines (gate 85/80) | `frontend/scripts/npm-in-docker.sh run test:coverage` |
+| Web unit tests (Vitest, React Testing Library, MSW) | **231**; coverage 98.4 % statements, 90.6 % branches, 98.9 % functions, 98.3 % lines (gate 85/80) | `frontend/scripts/npm-in-docker.sh run test:coverage` |
 | Web gates | ESLint with zero warnings (type-aware), Prettier, strict TypeScript; **any `console.error`/`warn` fails a test**; an unmocked request fails a test | the same, and CI |
 | End-to-end, real stack | **12 tests**, including axe (WCAG 2.1 A/AA) on every main page with no violations | `frontend/scripts/e2e.sh` (needs the root `.env`) |
 | Specs | **27 capabilities**: 18 for the API, 8 for the web app and 1 for the repository, all valid | `openspec validate --all --strict` |

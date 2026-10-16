@@ -7,7 +7,7 @@
 
 ## 2. The full stack at the root
 
-- [ ] 2.1 Move `frontend/docker-compose.full.yml` to the root `docker-compose.yml`, with the backend built from `./backend` and the app from `./frontend`; move the full stack's variables to the root `.env.example`. Verify: from a fresh clone, `cp .env.example .env && docker compose up --build --wait` makes the three services healthy, the app answers on :8000, and `trainer` sees the ten demo records; without `.env`, Compose names the missing variable.
+- [x] 2.1 Move `frontend/docker-compose.full.yml` to the root `docker-compose.yml`, with the backend built from `./backend` and the app from `./frontend`; move the full stack's variables to the root `.env.example`. Verify: from a fresh clone, `cp .env.example .env && docker compose up --build --wait` makes the three services healthy, the app answers on :8000, and `trainer` sees the ten demo records; without `.env`, Compose names the missing variable.
 - [x] 2.2 Point `frontend/scripts/e2e.sh` at the root compose file and `.env`. Verify: the whole suite passes.
 
 ## 3. One CI workflow
@@ -21,7 +21,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run the backend gate (`backend/scripts/verify-in-docker.sh`), the frontend gates (lint, format, types, tests with coverage, build) and the end-to-end suite from the root; `openspec validate adopt-monorepo --strict`; gitleaks over the full history. Verify: all pass; no leaks.
+- [x] 5.1 Run the backend gate (`backend/scripts/verify-in-docker.sh`), the frontend gates (lint, format, types, tests with coverage, build) and the end-to-end suite from the root; `openspec validate adopt-monorepo --strict`; gitleaks over the full history. Verify: all pass; no leaks.
 
 ## Workflow follow-up
 
