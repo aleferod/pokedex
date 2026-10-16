@@ -1,8 +1,8 @@
-# The whole product: PostgreSQL 16 + pokedex-api + this web app, with the demo data.
-#   cp .env.example .env && docker compose -f docker-compose.full.yml up --build
+# The whole product: PostgreSQL 16 + the API (backend/) + the web app (frontend/), with the demo data.
+#   cp .env.example .env && docker compose up --build
 # App: http://localhost:${WEB_PORT:-8000}   Swagger UI: http://localhost:${API_PORT:-8080}/swagger-ui.html
-# pokedex-api is built from its GitHub repository (main); set API_CONTEXT=../pokedex-api in .env to
-# build a local checkout instead. The web app reaches the API only through its /api proxy.
+# Both apps are built from this checkout. The web app reaches the API only through its /api proxy.
+# (backend/docker-compose.yml runs the API and its database alone.)
 name: pokedex-full
 
 services:
@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   api:
-    build: ${API_CONTEXT:-https://github.com/aleferod/pokedex-api.git#main}
+    build: ./backend
     image: pokedex-api:full
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   web:
-    build: .
+    build: ./frontend
     image: pokedex-web:full
     environment:
       API_UPSTREAM: http://api:8080

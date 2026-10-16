@@ -1,10 +1,11 @@
 #!/usr/bin/env sh
-# End-to-end tests against a fresh full stack (docker-compose.full.yml), in Playwright's own image.
+# End-to-end tests against a fresh full stack (the repository root's docker-compose.yml, which builds
+# the API and this app from this checkout), in Playwright's own image.
 #   scripts/e2e.sh                  the journeys and accessibility checks
 #   scripts/e2e.sh --screenshots    regenerate docs/screenshots/ instead
 #   scripts/e2e.sh -- <args>        extra arguments for `playwright test` (e.g. a file or -g)
 # The stack runs as Compose project "pokedex-e2e" on ports 8100 (app) and 8180 (API) and is always
-# removed afterwards, database included. Needs .env (cp .env.example .env).
+# removed afterwards, database included. Needs the root .env (cp .env.example .env at the root).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -22,13 +23,13 @@ if [ "${1:-}" = "--" ]; then
   shift
 fi
 
-if [ ! -f .env ]; then
-  echo "No .env: run  cp .env.example .env  first." >&2
+if [ ! -f ../.env ]; then
+  echo "No .env at the repository root: run  cp .env.example .env  there first." >&2
   exit 2
 fi
 
 compose() {
-  docker compose -f docker-compose.full.yml "$@"
+  docker compose -f ../docker-compose.yml "$@"
 }
 
 cleanup() {
