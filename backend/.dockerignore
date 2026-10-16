@@ -1,0 +1,16 @@
+# Only .mvn/, mvnw, pom.xml and src/ are needed to build the image.
+.git
+.github
+.idea
+.vscode
+*.iml
+.claude
+target
+docs
+openspec
+scripts
+*.md
+docker-compose*.yml
+# Never send local secrets to the build context.
+.env
+.env.*

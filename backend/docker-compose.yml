@@ -1,0 +1,47 @@
+# Local stack: PostgreSQL 16 + the API.
+#   cp .env.example .env && docker compose up --build
+# API on http://localhost:${SERVER_PORT:-8080}; Postgres published on ${DB_PORT:-5433}
+# (not 5432, to avoid clashing with a PostgreSQL already running on the host).
+name: pokedex
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-pokedex}
+      POSTGRES_USER: ${DB_USERNAME:-pokedex}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set - run cp .env.example .env}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - pokedex-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build: .
+    image: pokedex-api:local
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-pokedex}
+      DB_USERNAME: ${DB_USERNAME:-pokedex}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set - run cp .env.example .env}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - run cp .env.example .env}
+      JWT_TTL: ${JWT_TTL:-PT1H}
+      POKEAPI_BASE_URL: ${POKEAPI_BASE_URL:-https://pokeapi.co/api/v2}
+      CATALOG_CACHE_TTL: ${CATALOG_CACHE_TTL:-PT1H}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pokedex-db-data:

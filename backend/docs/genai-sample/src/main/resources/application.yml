@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: tasks-api
+  datasource:
+    url: ${TASKS_DB_URL:jdbc:postgresql://localhost:5432/tasks}
+    username: ${TASKS_DB_USERNAME:tasks}
+    password: ${TASKS_DB_PASSWORD:tasks}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+tasks:
+  jwt:
+    secret: ${TASKS_JWT_SECRET}

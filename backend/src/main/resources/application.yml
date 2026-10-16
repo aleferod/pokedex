@@ -1,0 +1,99 @@
+# Shared defaults. Deployment-specific values come from environment variables;
+# profiles: local (default, host + .env), docker (Compose stack), test (Testcontainers).
+spring:
+  application:
+    name: pokedex-api
+  profiles:
+    default: local
+  web:
+    resources:
+      # The API serves no static files: unmatched paths become 404 for every HTTP method.
+      add-mappings: false
+  jpa:
+    # Flyway owns the schema; Hibernate only checks that the mappings match it.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration
+  jackson:
+    deserialization:
+      # Unknown JSON members are client errors (400 with the field named), never silently ignored.
+      fail-on-unknown-properties: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Defence in depth: never echo internals, even if an error bypasses our handlers.
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
+    whitelabel:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only what operators and orchestrators need; env, beans, heapdump, shutdown... stay hidden.
+        include: health, info
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    # Every log line carries the request's correlation id (set by CorrelationIdFilter in the MDC).
+    correlation: "[%X{correlationId:-}] "
+
+app:
+  security:
+    jwt:
+      # HMAC-SHA256 signing secret, at least 32 bytes. Required outside tests: no default on purpose.
+      secret: ${JWT_SECRET}
+      ttl: ${JWT_TTL:PT1H}
+      issuer: pokedex-api
+      # Tolerance for clock differences when checking exp/nbf.
+      clock-skew: PT30S
+    password:
+      bcrypt-strength: ${BCRYPT_STRENGTH:10}
+  pokeapi:
+    base-url: ${POKEAPI_BASE_URL:https://pokeapi.co/api/v2}
+    connect-timeout: PT2S
+    # Deadline for the whole response (Spring applies it to the body read too).
+    read-timeout: PT5S
+    # Instance-wide cap on concurrent PokeAPI detail fetches.
+    max-concurrency: 8
+    user-agent: pokedex-api/@project.version@ (+https://github.com/aleferod/pokedex-api)
+    retry:
+      # Connection failures, 5xx and 429 only; timeouts and 404 are never retried.
+      max-attempts: 3
+      # Doubles after each failed attempt, with +/-50% jitter.
+      initial-backoff: 200ms
+    circuit-breaker:
+      # Open when this % of the last sliding-window calls failed (after minimum-calls calls)...
+      failure-rate-threshold: 50
+      minimum-calls: 10
+      sliding-window: 20
+      # ...and answer 503 at once for this long, then allow 3 trial calls.
+      open-duration: PT30S
+  seed:
+    # Demo accounts (admin, trainer) and local Pokémon at startup. The demo passwords are public:
+    # never enable this on a public deployment. Docker Compose and .env.example switch it on.
+    enabled: ${SEED_DEMO_DATA:false}
+    location: classpath:seed/demo-data.json
+  catalog-cache:
+    # How long a catalog page or Pokémon detail is reused before PokeAPI is asked again.
+    ttl: ${CATALOG_CACHE_TTL:PT1H}
+    # Entries per cache (pages, details); the least valuable are evicted first.
+    max-entries: 2000
+  cors:
+    # Comma-separated exact origins (no wildcards). Default: the Vite dev server of pokedex-web.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  problems:
+    # Problem "type" URIs resolve to the documentation of each problem type.
+    base-uri: https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#
