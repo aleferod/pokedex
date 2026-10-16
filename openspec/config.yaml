@@ -115,8 +115,8 @@ rules:
     - Say which app the change touches (backend, frontend or both).
   specs:
     - Every requirement uses SHALL and has at least one "#### Scenario:" block in WHEN / THEN form.
-    - Backend: cover error paths (400, 401, 403, 404, 409, 503 as relevant) with their own scenarios, not only the happy path.
-    - Frontend: include loading, empty and error-state scenarios for every data view.
+    - For the backend, cover error paths (400, 401, 403, 404, 409, 503 as relevant) with their own scenarios, not only the happy path.
+    - For the frontend, include loading, empty and error-state scenarios for every data view.
   design:
     - Name the design patterns used and the classes or packages where they live.
     - Record trade-offs and rejected alternatives, and the frontend's state-management and component-boundary decisions.

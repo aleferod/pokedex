@@ -1,8 +1,9 @@
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
 
 /*
- * End-to-end tests against the full stack (docker-compose.full.yml). Run them with scripts/e2e.sh,
- * which starts a fresh stack, runs this in Playwright's own image, and removes the stack afterwards.
+ * End-to-end tests against the full stack (the repository root's docker-compose.yml). Run them with
+ * scripts/e2e.sh, which starts a fresh stack, runs this in Playwright's own image, and removes the
+ * stack afterwards.
  * E2E_SCREENSHOTS=1 runs only the @screenshots tests, which regenerate docs/screenshots/.
  */
 

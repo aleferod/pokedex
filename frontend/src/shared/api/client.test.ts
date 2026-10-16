@@ -6,7 +6,7 @@ import { server } from '@/test/server';
 import { ApiError } from './ApiError';
 import { apiRequest, configureApiClient } from './client';
 
-const PROBLEM_TYPE = 'https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#';
+const PROBLEM_TYPE = 'https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#';
 
 function problem(status: number, slug: string, detail: string, errors: object[] = []) {
   return HttpResponse.json(

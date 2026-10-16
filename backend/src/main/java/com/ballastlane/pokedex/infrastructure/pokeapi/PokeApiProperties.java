@@ -79,7 +79,7 @@ public record PokeApiProperties(
     }
     userAgent =
         userAgent == null || userAgent.isBlank()
-            ? "pokedex-api (+https://github.com/aleferod/pokedex-api)"
+            ? "pokedex-api (+https://github.com/aleferod/pokedex)"
             : userAgent;
     retry = retry == null ? new Retry(null, null) : retry;
     circuitBreaker =

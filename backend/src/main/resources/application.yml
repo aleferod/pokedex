@@ -68,7 +68,7 @@ app:
     read-timeout: PT5S
     # Instance-wide cap on concurrent PokeAPI detail fetches.
     max-concurrency: 8
-    user-agent: pokedex-api/@project.version@ (+https://github.com/aleferod/pokedex-api)
+    user-agent: pokedex-api/@project.version@ (+https://github.com/aleferod/pokedex)
     retry:
       # Connection failures, 5xx and 429 only; timeouts and 404 are never retried.
       max-attempts: 3
@@ -96,4 +96,4 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   problems:
     # Problem "type" URIs resolve to the documentation of each problem type.
-    base-uri: https://github.com/aleferod/pokedex-api/blob/main/docs/problems.md#
+    base-uri: https://github.com/aleferod/pokedex/blob/main/backend/docs/problems.md#

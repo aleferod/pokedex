@@ -1,13 +1,13 @@
 # Pokédex Web
 
-[![CI](https://github.com/aleferod/pokedex-web/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleferod/pokedex-web/actions/workflows/ci.yml)
+[![CI](https://github.com/aleferod/pokedex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleferod/pokedex/actions/workflows/ci.yml)
 ![React 19](https://img.shields.io/badge/React-19-61dafb)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
-The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Ballast Lane Java technical exercise. It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
+The frontend of the [Pokédex](../README.md) for the Ballast Lane Java technical exercise. The API it talks to, pokedex-api, is in [`backend/`](../backend). It browses the Pokémon catalog and lets signed-in users manage a local Pokédex with their own notes, tags and localized names. It's built spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and test-first.
 
-> **Status:** complete. Six OpenSpec changes cover the application shell and quality gates, authentication, the paginated catalog (US01), the Pokémon detail page (US02), the local Pokédex with sync, editing and optimistic concurrency (US03/US04), and end-to-end tests with the full stack in one command. See [Roadmap](#roadmap).
+> **Status:** complete. Eight OpenSpec changes cover the application shell and quality gates, authentication, the paginated catalog (US01), the Pokémon detail page (US02), the local Pokédex with sync, editing and optimistic concurrency (US03/US04), end-to-end tests with the full stack in one command, reliable form submission, and searching the catalog as you type. A ninth moved the app into this repository, next to the API. See [Roadmap](#roadmap).
 
 ## Contents
 
@@ -31,10 +31,10 @@ The frontend for [pokedex-api](https://github.com/aleferod/pokedex-api), the Bal
 
 ## Run the whole product
 
-You only need **Docker** (with Compose v2). From a clone of this repository:
+You only need **Docker** (with Compose v2). From the repository root:
 
 ```bash
-cp .env.example .env && docker compose -f docker-compose.full.yml up --build
+cp .env.example .env && docker compose up --build
 ```
 
 | What          | Where                                                                           |
@@ -43,13 +43,13 @@ cp .env.example .env && docker compose -f docker-compose.full.yml up --build
 | Swagger UI    | <http://localhost:8080/swagger-ui.html>                                         |
 | Demo accounts | `trainer / Trainer@123` (browse and edit) and `admin / Admin@123` (also delete) |
 
-[`docker-compose.full.yml`](docker-compose.full.yml) runs PostgreSQL 16, [pokedex-api](https://github.com/aleferod/pokedex-api) and this app, with ten demo Pokémon in the local Pokédex.
+The root [`docker-compose.yml`](../docker-compose.yml) runs PostgreSQL 16, the API ([`backend/`](../backend)) and this app, with ten demo Pokémon in the local Pokédex.
 
-- **The API image:** pokedex-api is built straight from its GitHub repository's `main`. To build a local checkout instead, set `API_CONTEXT=../pokedex-api` in `.env`.
+- **One checkout:** both images are built from the same checkout, so the stack always runs the API and the app of the same commit.
 - **Readiness:** every service has a health check, so `up --wait` returns once the product works.
 - **One origin:** the app reaches the API only through its `/api` proxy.
-- **Secrets:** they come only from `.env`. `.env.example` holds local placeholders, the same as pokedex-api's; set real values anywhere else. Without a `.env`, Compose stops and names the missing variable.
-- **Stopping:** `docker compose -f docker-compose.full.yml down` keeps the data, and `down -v` removes it.
+- **Secrets:** they come only from the root `.env`. The root `.env.example` holds local placeholders, the same as the backend's; set real values anywhere else. Without a `.env`, Compose stops and names the missing variable.
+- **Stopping:** `docker compose down` keeps the data, and `down -v` removes it.
 
 A short tour:
 
@@ -80,7 +80,7 @@ You only need **Docker**. Every npm command runs in a Node 24 LTS container thro
 ./scripts/npm-in-docker.sh run dev        # http://localhost:5173, /api proxied to localhost:8080
 ```
 
-Start [pokedex-api](https://github.com/aleferod/pokedex-api) next to it (`docker compose up` in that repository), and the dev server proxies `/api` to it. The browser only ever talks to one origin.
+Start the API next to it (`docker compose up` in [`backend/`](../backend)), and the dev server proxies `/api` to it. The browser only ever talks to one origin.
 
 To run the production image instead:
 
@@ -248,21 +248,22 @@ How it behaves:
 ## End-to-end tests
 
 ```bash
-cp .env.example .env    # once
+cp ../.env.example ../.env    # once: the stack reads the root .env
 ./scripts/e2e.sh        # or: ./scripts/npm-in-docker.sh run test:e2e
 ```
 
 [`scripts/e2e.sh`](scripts/e2e.sh) runs Playwright against the real product:
 
-1. It starts a **fresh** full stack (Compose project `pokedex-e2e`, ports 8100 and 8180).
+1. It starts a **fresh** full stack from the root [`docker-compose.yml`](../docker-compose.yml), building the API and this app from the same checkout (Compose project `pokedex-e2e`, ports 8100 and 8180).
 2. It runs Playwright 1.63 with Chromium in its official Docker image, so nothing is installed on the host.
 3. It always removes the stack and its database afterwards.
 
 | Journey                         | What it covers                                                                                                                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`visitor`](e2e/visitor.e2e.ts) | the catalog and paging with focus, a Pokémon's page, its evolution chain, the way back to the same catalog page, the finder, an unknown Pokémon                                                 |
+| [`visitor`](e2e/visitor.e2e.ts) | the catalog and paging with focus, a Pokémon's page, its evolution chain, the way back to the same catalog page, searching as you type and back to the search, an unknown Pokémon               |
 | [`account`](e2e/account.e2e.ts) | register, sign out of a protected page, a wrong password, sign in                                                                                                                               |
 | [`local`](e2e/local.e2e.ts)     | a visitor sent to sign in and back; tag filters; sync (import and re-sync); tags in place; an edit; **a real 409** from a second client and "Load the latest version"; deletion by `admin` only |
+| [`forms`](e2e/forms.e2e.ts)     | one held click on a submit button right after leaving an invalid field: the click isn't lost, focus moves to the first problem, and nothing is sent                                             |
 | [`a11y`](e2e/a11y.e2e.ts)       | **axe** (WCAG 2.1 A and AA) on every main page, including forms showing their errors and the delete confirmation. A serious or critical violation fails the run.                                |
 
 These tests exist because a real browser finds what jsdom can't.
@@ -282,16 +283,17 @@ The [`Dockerfile`](Dockerfile) builds in two stages: `node:24-alpine` runs `npm 
 - **Security headers:** `X-Content-Type-Options`, `Referrer-Policy` and `X-Frame-Options` on every response.
 - **Health check:** `GET /healthz`.
 
-[`docker-compose.full.yml`](docker-compose.full.yml) runs this image with pokedex-api and PostgreSQL; see [Run the whole product](#run-the-whole-product).
+The root [`docker-compose.yml`](../docker-compose.yml) runs this image with the API and PostgreSQL; see [Run the whole product](#run-the-whole-product).
 
 ## Spec-driven workflow
 
-- **Where specs live:** every change starts as an OpenSpec proposal in `openspec/changes/<id>/` (proposal, design, tasks, spec deltas), validated with `openspec validate --strict`.
+- **Where specs live:** every change starts as an OpenSpec proposal in the repository root's [`openspec/changes/<id>/`](../openspec/changes) (proposal, design, tasks, spec deltas), validated with `openspec validate --strict`.
 - **How it's built:** test-first, with failing `test:` commits before `feat:` commits.
-- **How it ends:** the change is archived into [`openspec/specs`](openspec/specs) as the last commit of its pull request.
+- **How it ends:** the change is archived into [`openspec/specs`](../openspec/specs) as the last commit of its pull request.
 
-CI runs these jobs on every push and pull request:
+CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml), one workflow for both apps) runs these jobs on every push and pull request:
 
+- the backend's build and tests, and its image
 - lint, format check, type-check, tests with coverage, and the production build
 - the Docker image build
 - spec validation
@@ -306,7 +308,12 @@ CI runs these jobs on every push and pull request:
 4. ✅ `add-detail-ui`: the detail view with stats and the evolution chain (US02)
 5. ✅ `add-local-pokemon-management-ui`: sync, list, filter, create, edit and delete local records (US03/US04)
 6. ✅ `add-e2e-and-polish`: the full stack in one command, Playwright end-to-end tests with axe, screenshots
+7. ✅ `fix-submit-after-blur`: a submit click is no longer lost to blur-time validation
+8. ✅ `add-catalog-search-ui`: search the catalog by part of a name as you type
+9. ✅ `adopt-monorepo`: this app moved into [aleferod/pokedex](../README.md) as `frontend/`, next to the API; one CI, the full stack at the root
+
+Changes 1–8 were pull requests in [aleferod/pokedex-web](https://github.com/aleferod/pokedex-web/pulls?q=is%3Apr+is%3Amerged), where their red/green commits are.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](../LICENSE)

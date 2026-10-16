@@ -6,13 +6,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.core.io.ClassPathResource;
 
 class PokeApiPropertiesTest {
 
@@ -23,7 +26,24 @@ class PokeApiPropertiesTest {
     assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(2));
     assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(5));
     assertThat(properties.maxConcurrency()).isEqualTo(8);
-    assertThat(properties.userAgent()).startsWith("pokedex-api");
+    assertThat(properties.userAgent())
+        .isEqualTo("pokedex-api (+https://github.com/aleferod/pokedex)");
+  }
+
+  @Test
+  void should_nameTheRepositoryInTheUserAgent_when_defaultConfigurationIsUsed() {
+    // Given
+    YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+    yaml.setResources(new ClassPathResource("application.yml"));
+
+    // When
+    Properties properties = yaml.getObject();
+
+    // Then
+    assertThat(properties).isNotNull();
+    assertThat(properties.getProperty("app.pokeapi.user-agent"))
+        .startsWith("pokedex-api/")
+        .endsWith(" (+https://github.com/aleferod/pokedex)");
   }
 
   @Test
