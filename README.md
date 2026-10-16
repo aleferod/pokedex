@@ -180,7 +180,7 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
 
 `/pokemon` (US01) shows the catalog as a responsive grid, from one column at 360 px up to four on desktop. Each card shows the sprite, `#number`, name, category, weight in kg and abilities, and links to the Pokémon's page.
 
-- **The URL is the state:** `?page` (1-based) and `?size` (20, 40 or 60), so a view can be shared and survives a reload. Defaults are left out (`/pokemon` is page 1 of 20), and nonsense values fall back to them.
+- **The URL is the state:** `?page` (1-based), `?size` (20, 40 or 60) and `?name` (the search), so a view can be shared and survives a reload. Defaults are left out (`/pokemon` is page 1 of 20), and nonsense values fall back to them.
 - **Paging:**
   - Previous/Next and "Page N of M"; changing the page moves focus to the results heading.
   - The current page stays on screen, marked busy, while the next one loads.
@@ -189,7 +189,12 @@ Every call goes through `apiRequest` in [`src/shared/api`](src/shared/api):
   - skeleton cards with a "Loading Pokémon…" status
   - "There are no Pokémon on this page" past the end, with a link to the last page
   - an error with "Try again" (a 503 says PokeAPI is temporarily unavailable)
-- **Find a Pokémon:** a name or Pokédex number, checked with the API's own identifier rule, opens `/pokemon/<id or name>`. The catalog API has no text search, so this is how you jump to a Pokémon; tag and name filters come with the local Pokédex.
+- **Find a Pokémon searches as you type:** with **3 or more characters** of a name, the catalog shows the Pokémon whose name contains them, after a 300 ms pause. "pika" finds Pikachu and its 16 other forms, through pokedex-api's `?name=` search.
+  - **Where it lives:** the search is in the URL (`/pokemon?name=pika`), next to the page size. Pauses replace the history entry rather than adding one each. The field keeps focus while the results change, and follows Back.
+  - **The results:** "17 Pokémon match “pika”" is announced politely, "Clear search" returns to the catalog, and "No Pokémon match “zzz”." covers no results.
+  - **Characters the API won't accept** are explained in place, with no request.
+  - **Numbers:** a Pokédex number and Enter opens that Pokémon.
+  - **Back to the catalog:** on a Pokémon's page, it returns to the search the visitor came from.
 
 ## Pokémon detail
 

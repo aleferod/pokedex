@@ -27,4 +27,11 @@ describe('the way back to the catalog', () => {
     expect(catalogReturnSearch({ catalogSearch: '?page=abc&size=7&next=//evil.example' })).toBe('');
     expect(catalogReturnSearch({ catalogSearch: '//evil.example' })).toBe('');
   });
+
+  it('carries the search too, rebuilt like the rest', () => {
+    expect(catalogReturnState(1, 20, 'pika')).toEqual({ catalogSearch: '?name=pika' });
+    expect(catalogReturnSearch({ catalogSearch: '?name=pika&page=2' })).toBe('?page=2&name=pika');
+    expect(catalogReturnSearch({ catalogSearch: '?name=Mr%20Mime' })).toBe('?name=mr-mime');
+    expect(catalogReturnSearch({ catalogSearch: '?name=p%21&size=40' })).toBe('?size=40');
+  });
 });

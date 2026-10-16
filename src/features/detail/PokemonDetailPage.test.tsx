@@ -58,6 +58,30 @@ function detailApi() {
   return requests;
 }
 
+/** The catalog searched by name: Pikachu is the only match. */
+function pikachuSearchApi() {
+  server.use(
+    http.get('/api/v1/pokemon', () =>
+      HttpResponse.json({
+        content: [
+          {
+            id: 25,
+            name: 'pikachu',
+            spriteUrl: null,
+            category: 'Mouse Pokémon',
+            weight: 6,
+            abilities: ['static'],
+          },
+        ],
+        page: 0,
+        size: 20,
+        totalElements: 1,
+        totalPages: 1,
+      }),
+    ),
+  );
+}
+
 async function findName(name: string) {
   return screen.findByRole('heading', { level: 1, name });
 }
@@ -332,6 +356,36 @@ describe('Pokémon detail page', () => {
       expect(router.state.location.pathname).toBe('/pokemon');
     });
     expect(router.state.location.search).toBe('?page=3&size=40');
+  });
+
+  it('leads back to the search it came from', async () => {
+    const user = userEvent.setup();
+    detailApi();
+    pikachuSearchApi();
+    renderRoute('/pokemon?name=pika');
+
+    const card = (await screen.findByRole('heading', { name: 'Pikachu' })).closest('a');
+    await user.click(card as HTMLElement);
+    await findName('Pikachu');
+
+    expect(screen.getByRole('link', { name: 'Back to the catalog' })).toHaveAttribute(
+      'href',
+      '/pokemon?name=pika',
+    );
+  });
+
+  it('searches the catalog from the not-found page', async () => {
+    const user = userEvent.setup();
+    detailApi();
+    pikachuSearchApi();
+    const { router } = renderRoute('/pokemon/missingno');
+    await findName('Pokémon not found');
+
+    await user.type(screen.getByLabelText('Find a Pokémon'), 'pika{Enter}');
+
+    expect(await screen.findByRole('heading', { name: 'Pikachu' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/pokemon');
+    expect(router.state.location.search).toBe('?name=pika');
   });
 
   it('leads back to the first catalog page when opened directly', async () => {

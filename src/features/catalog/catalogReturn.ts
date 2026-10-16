@@ -1,17 +1,17 @@
-import { catalogSearch, parsePage, parseSize } from './catalogParams';
+import { catalogSearch, parseName, parsePage, parseSize } from './catalogParams';
 
-/** What a card link carries so the detail page can lead back to this catalog view. */
+/** What a card link carries so the detail page can lead back to this catalog view (and search). */
 export interface CatalogReturnState {
   catalogSearch: string;
 }
 
-export function catalogReturnState(page: number, size: number): CatalogReturnState {
-  return { catalogSearch: catalogSearch(page, size) };
+export function catalogReturnState(page: number, size: number, name = ''): CatalogReturnState {
+  return { catalogSearch: catalogSearch(page, size, name) };
 }
 
 /**
  * The catalog search to return to, read from a location's state; `''` means the first page.
- * History state is not trusted: only the page and size are read from it, and the search is
+ * History state is not trusted: only the page, size and search are read from it, and the query is
  * rebuilt from them.
  */
 export function catalogReturnSearch(state: unknown): string {
@@ -23,5 +23,9 @@ export function catalogReturnSearch(state: unknown): string {
     return '';
   }
   const params = new URLSearchParams(search);
-  return catalogSearch(parsePage(params.get('page')), parseSize(params.get('size')));
+  return catalogSearch(
+    parsePage(params.get('page')),
+    parseSize(params.get('size')),
+    parseName(params.get('name')),
+  );
 }

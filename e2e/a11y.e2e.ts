@@ -37,6 +37,10 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await expect(page.getByRole('heading', { name: 'Bulbasaur' })).toBeVisible();
     await expectAccessible(page, 'catalog');
 
+    await page.goto('/pokemon?name=pika');
+    await expect(page.getByText('17 Pokémon match “pika”')).toBeVisible();
+    await expectAccessible(page, 'catalog search results');
+
     await page.goto('/pokemon/133');
     await expect(page.getByRole('heading', { level: 1, name: 'Eevee' })).toBeVisible();
     await expectAccessible(page, 'a Pokémon with a branching chain');

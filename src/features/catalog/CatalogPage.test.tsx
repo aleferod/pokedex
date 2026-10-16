@@ -32,17 +32,41 @@ const PAGES: Record<number, object[]> = {
   2: [entry(41, 'zubat', { category: 'Bat Pokémon', abilities: ['inner-focus'] })],
 };
 
-/** The catalog endpoint, recording every (page, size) it was asked for. */
+/** What a search can find, in Pokédex order (a few of PokeAPI's real names). */
+const SEARCHABLE = [
+  entry(1, 'bulbasaur'),
+  entry(2, 'ivysaur', { weight: 13 }),
+  entry(3, 'venusaur', { weight: 100 }),
+  entry(25, 'pikachu', { category: 'Mouse Pokémon', weight: 6, abilities: ['static'] }),
+  entry(26, 'raichu', { category: 'Mouse Pokémon', weight: 30, abilities: ['static'] }),
+  entry(10080, 'pikachu-rock-star', { category: 'Mouse Pokémon', weight: 6 }),
+];
+
+/**
+ * The catalog endpoint, recording every (page, size) it was asked for, and the name of a search:
+ * with `name` it answers like pokedex-api, with the entries whose name contains it.
+ */
 function catalogApi(options: { delayPage?: number } = {}) {
-  const requests: { page: number; size: number }[] = [];
+  const requests: { page: number; size: number; name?: string }[] = [];
   server.use(
     http.get('/api/v1/pokemon', async ({ request }) => {
       const url = new URL(request.url);
       const page = Number(url.searchParams.get('page'));
       const size = Number(url.searchParams.get('size'));
-      requests.push({ page, size });
+      const name = url.searchParams.get('name');
+      requests.push(name === null ? { page, size } : { page, size, name });
       if (options.delayPage === page) {
         await delay('infinite');
+      }
+      if (name !== null) {
+        const matches = SEARCHABLE.filter((match) => match.name.includes(name));
+        return HttpResponse.json({
+          content: matches.slice(page * size, page * size + size),
+          page,
+          size,
+          totalElements: matches.length,
+          totalPages: Math.ceil(matches.length / size),
+        });
       }
       return HttpResponse.json({
         content: PAGES[page] ?? [],
@@ -69,6 +93,33 @@ function pikachuDetailApi() {
     }),
   );
   return requests;
+}
+
+/**
+ * Waits until the result cards are exactly these names and no longer busy: after the URL changes,
+ * the previous results stay on screen until the new ones arrive.
+ */
+async function expectResults(names: string[]): Promise<void> {
+  await waitFor(() => {
+    const list = screen.getByRole('list', { name: 'Pokémon' });
+    expect(list).toHaveAttribute('aria-busy', 'false');
+    expect(
+      within(list)
+        .getAllByRole('heading')
+        .map((heading) => heading.textContent),
+    ).toEqual(names);
+  });
+}
+
+function searches(requests: { name?: string }[]): string[] {
+  return requests.flatMap((request) => (request.name === undefined ? [] : [request.name]));
+}
+
+/** Longer than the search's pause, to show that nothing happened. */
+function afterThePause(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 500);
+  });
 }
 
 describe('catalog page', () => {
@@ -244,18 +295,20 @@ describe('catalog page', () => {
 
   // The finder's tests wait for the Pokémon's page itself: it loads its detail, so ending at the
   // address alone would leave that request racing the test's cleanup.
-  it('finds a Pokémon by name and opens its page', async () => {
+  it('searches at once when a name is submitted', async () => {
     const user = userEvent.setup();
-    catalogApi();
-    const details = pikachuDetailApi();
+    const requests = catalogApi();
     const { router } = renderRoute('/pokemon');
 
     await user.type(await screen.findByLabelText('Find a Pokémon'), 'Pikachu');
     await user.click(screen.getByRole('button', { name: 'Find' }));
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Pikachu' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/pokemon/pikachu');
-    expect(details).toEqual(['pikachu']);
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('?name=pikachu');
+    });
+    await expectResults(['Pikachu', 'Pikachu-rock-star']);
+    expect(requests).toContainEqual({ page: 0, size: 20, name: 'pikachu' });
+    expect(router.state.location.pathname).toBe('/pokemon');
   });
 
   it('reads a Pokédex number with leading zeros', async () => {
@@ -271,21 +324,22 @@ describe('catalog page', () => {
     expect(details).toEqual(['25']);
   });
 
-  it('rejects something that is neither a number nor a name, in place', async () => {
+  it('asks for at least 3 letters or a number when too little is submitted', async () => {
     const user = userEvent.setup();
-    catalogApi();
+    const requests = catalogApi();
     const { router } = renderRoute('/pokemon');
 
-    await user.type(await screen.findByLabelText('Find a Pokémon'), 'pika chu{Enter}');
+    await user.type(await screen.findByLabelText('Find a Pokémon'), 'pi{Enter}');
 
     const field = screen.getByLabelText('Find a Pokémon');
     await waitFor(() => {
       expect(field).toHaveAttribute('aria-invalid', 'true');
     });
     expect(field).toHaveAccessibleDescription(
-      expect.stringContaining('Enter a Pokédex number or a name such as pikachu'),
+      expect.stringContaining('Type at least 3 letters of a name, or a Pokédex number'),
     );
-    expect(router.state.location.pathname).toBe('/pokemon');
+    expect(router.state.location.search).toBe('');
+    expect(searches(requests)).toEqual([]);
   });
 
   it('is one click away from the home page', async () => {
@@ -295,5 +349,126 @@ describe('catalog page', () => {
       'href',
       '/pokemon',
     );
+  });
+});
+
+describe('searching the catalog by name', () => {
+  it('searches after a pause once 3 characters are typed, keeping focus in the field', async () => {
+    const user = userEvent.setup();
+    const requests = catalogApi();
+    const { router } = renderRoute('/pokemon');
+    const field = await screen.findByLabelText('Find a Pokémon');
+
+    await user.type(field, 'Pika');
+
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('?name=pika');
+    });
+    await expectResults(['Pikachu', 'Pikachu-rock-star']);
+    expect(screen.getByText('2 Pokémon match “pika”')).toBeInTheDocument();
+    expect(searches(requests)).toEqual(['pika']);
+    expect(requests).toContainEqual({ page: 0, size: 20, name: 'pika' });
+    expect(field).toHaveFocus();
+    expect(field).toHaveValue('Pika');
+  });
+
+  it('does not search with fewer than 3 characters', async () => {
+    const user = userEvent.setup();
+    const requests = catalogApi();
+    const { router } = renderRoute('/pokemon');
+
+    await user.type(await screen.findByLabelText('Find a Pokémon'), 'pi');
+    await afterThePause();
+
+    expect(router.state.location.search).toBe('');
+    expect(searches(requests)).toEqual([]);
+    expect(screen.getByRole('heading', { name: 'Bulbasaur' })).toBeInTheDocument();
+  });
+
+  it('explains characters the API would not accept, without searching', async () => {
+    const user = userEvent.setup();
+    const requests = catalogApi();
+    renderRoute('/pokemon');
+    const field = await screen.findByLabelText('Find a Pokémon');
+
+    await user.type(field, 'pika!');
+    await afterThePause();
+
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription(
+      expect.stringContaining('Use letters, digits, hyphens or spaces'),
+    );
+    expect(searches(requests)).toEqual([]);
+  });
+
+  it('says when nothing matches, and "Clear search" shows the catalog again', async () => {
+    const user = userEvent.setup();
+    catalogApi();
+    const { router } = renderRoute('/pokemon');
+    const field = await screen.findByLabelText('Find a Pokémon');
+
+    await user.type(field, 'zzz');
+
+    expect(await screen.findByText('No Pokémon match “zzz”.')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Clear search' }));
+
+    expect(await screen.findByRole('heading', { name: 'Bulbasaur' })).toBeInTheDocument();
+    expect(router.state.location.search).toBe('');
+    expect(field).toHaveValue('');
+  });
+
+  it('keeps the page size and starts from page 1', async () => {
+    const user = userEvent.setup();
+    const requests = catalogApi();
+    const { router } = renderRoute('/pokemon?page=3&size=40');
+
+    await user.type(await screen.findByLabelText('Find a Pokémon'), 'saur');
+
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('?size=40&name=saur');
+    });
+    await waitFor(() => {
+      expect(requests).toContainEqual({ page: 0, size: 40, name: 'saur' });
+    });
+    await expectResults(['Bulbasaur', 'Ivysaur', 'Venusaur']);
+  });
+
+  it('opens a shared search with the field filled in', async () => {
+    const requests = catalogApi();
+    renderRoute('/pokemon?name=pika&size=40');
+
+    await expectResults(['Pikachu', 'Pikachu-rock-star']);
+    expect(screen.getByLabelText('Find a Pokémon')).toHaveValue('pika');
+    expect(requests[0]).toEqual({ page: 0, size: 40, name: 'pika' });
+  });
+
+  it('follows the address when it changes, as with Back', async () => {
+    const user = userEvent.setup();
+    catalogApi();
+    const { router } = renderRoute('/pokemon?name=saur');
+    await expectResults(['Bulbasaur', 'Ivysaur', 'Venusaur']);
+
+    await user.click(screen.getByRole('link', { name: 'Clear search' }));
+    await screen.findByRole('heading', { name: 'Bulbasaur' });
+    await router.navigate(-1);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Find a Pokémon')).toHaveValue('saur');
+    });
+    await expectResults(['Bulbasaur', 'Ivysaur', 'Venusaur']);
+  });
+
+  it('shows the whole catalog again when the field is emptied', async () => {
+    const user = userEvent.setup();
+    catalogApi();
+    const { router } = renderRoute('/pokemon?name=pika');
+    await expectResults(['Pikachu', 'Pikachu-rock-star']);
+
+    await user.clear(screen.getByLabelText('Find a Pokémon'));
+
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('');
+    });
+    expect(await screen.findByRole('heading', { name: 'Bulbasaur' })).toBeInTheDocument();
   });
 });
