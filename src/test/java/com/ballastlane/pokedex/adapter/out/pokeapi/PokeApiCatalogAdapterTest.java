@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
 import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -80,6 +82,61 @@ class PokeApiCatalogAdapterTest {
         getRequestedFor(urlPathEqualTo("/api/v2/pokemon"))
             .withQueryParam("offset", matching("10000"))
             .withQueryParam("limit", matching("20")));
+  }
+
+  @Test
+  void should_returnEveryNumberAndNameInCatalogOrder_when_theNameIndexIsRequested() {
+    // Given
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon"))
+            .withQueryParam("offset", matching("0"))
+            .withQueryParam("limit", matching("100000"))
+            .willReturn(okJson(PokeApiFixtures.json("list-offset-0-limit-100000.json"))));
+
+    // When
+    List<CatalogName> names = adapter(8).findAllNames();
+
+    // Then
+    assertThat(names).hasSize(1351);
+    assertThat(names.getFirst()).isEqualTo(new CatalogName(new PokemonId(1), "bulbasaur"));
+    assertThat(names)
+        .contains(
+            new CatalogName(new PokemonId(25), "pikachu"),
+            new CatalogName(new PokemonId(10080), "pikachu-rock-star"),
+            new CatalogName(new PokemonId(10168), "mr-mime-galar"));
+    POKEAPI.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/pokemon")));
+  }
+
+  @Test
+  void should_throwUnavailable_when_theNameIndexCannotBeLoaded() {
+    POKEAPI.stubFor(get(urlPathEqualTo("/api/v2/pokemon")).willReturn(aResponse().withStatus(500)));
+
+    assertThatThrownBy(() -> adapter(8).findAllNames())
+        .isInstanceOf(CatalogUnavailableException.class);
+  }
+
+  @Test
+  void should_returnSummariesInTheGivenOrder_when_requestedByNumber() {
+    // Given
+    stubFirstThree();
+
+    // When
+    List<PokemonSummary> summaries =
+        adapter(8).findSummaries(List.of(new PokemonId(3), new PokemonId(1)));
+
+    // Then
+    assertThat(summaries).extracting(PokemonSummary::name).containsExactly("venusaur", "bulbasaur");
+    assertThat(summaries).extracting(PokemonSummary::category).containsOnly("Seed Pokémon");
+  }
+
+  @Test
+  void should_throwUnavailable_when_aRequestedSummaryCannotBeFetched() {
+    stubFirstThree();
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon/2")).willReturn(aResponse().withStatus(404)));
+
+    assertThatThrownBy(() -> adapter(8).findSummaries(List.of(new PokemonId(1), new PokemonId(2))))
+        .isInstanceOf(CatalogUnavailableException.class);
   }
 
   @Test

@@ -4,6 +4,7 @@ import com.ballastlane.pokedex.adapter.in.web.PageResponse;
 import com.ballastlane.pokedex.application.port.in.pokemon.GetPokemonDetail;
 import com.ballastlane.pokedex.application.port.in.pokemon.ListPokemon;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
+import com.ballastlane.pokedex.domain.pokemon.PokemonNameQuery;
 import com.ballastlane.pokedex.domain.shared.PageRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -38,9 +39,14 @@ public class PokemonController {
   }
 
   @GetMapping
-  @Operation(summary = "Browse the catalog page by page (US01)")
+  @Operation(
+      summary = "Browse the catalog page by page, or search it by part of a name (US01)",
+      description =
+          "Without `name`, the whole catalog in Pokédex order. With `name`, only the Pokémon whose"
+              + " name contains it (case-insensitive; spaces count as hyphens), in the same order"
+              + " and with the same paging.")
   @ApiResponse(responseCode = "200", description = "A page of catalog entries")
-  @ApiResponse(responseCode = "400", description = "Invalid page or size")
+  @ApiResponse(responseCode = "400", description = "Invalid page, size or name")
   @ApiResponse(responseCode = "503", description = "PokeAPI is unavailable; retry later")
   public PageResponse<PokemonSummaryResponse> list(
       @Parameter(description = "Zero-based page number", example = "0")
@@ -51,8 +57,19 @@ public class PokemonController {
           @RequestParam(defaultValue = "" + PageRequest.DEFAULT_SIZE)
           @Min(1)
           @Max(PageRequest.MAX_SIZE)
-          int size) {
-    return PokemonWebMapper.toResponse(listPokemon.list(new PageRequest(page, size)));
+          int size,
+      @Parameter(
+              description =
+                  "Part of the name to search for: 3 to 50 letters, digits, hyphens or spaces."
+                      + " Blank or absent lists the whole catalog.",
+              example = "pika")
+          @RequestParam(required = false)
+          String name) {
+    PageRequest request = new PageRequest(page, size);
+    return PokemonWebMapper.toResponse(
+        PokemonNameQuery.parse(name)
+            .map(query -> listPokemon.search(query, request))
+            .orElseGet(() -> listPokemon.list(request)));
   }
 
   @GetMapping("/{idOrName}")

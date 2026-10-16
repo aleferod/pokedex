@@ -31,7 +31,9 @@ class CatalogCacheConfigurationTest {
           CacheManager manager = started.getBean(CacheManager.class);
           assertThat(manager.getCacheNames())
               .containsExactlyInAnyOrder(
-                  CachingPokemonCatalog.PAGES, CachingPokemonCatalog.DETAILS);
+                  CachingPokemonCatalog.PAGES,
+                  CachingPokemonCatalog.DETAILS,
+                  CachingPokemonCatalog.NAMES);
           assertThat(manager.getCache("anything-else")).isNull();
         });
   }
@@ -41,7 +43,11 @@ class CatalogCacheConfigurationTest {
     context.run(
         started -> {
           CacheManager manager = started.getBean(CacheManager.class);
-          for (String name : List.of(CachingPokemonCatalog.PAGES, CachingPokemonCatalog.DETAILS)) {
+          for (String name :
+              List.of(
+                  CachingPokemonCatalog.PAGES,
+                  CachingPokemonCatalog.DETAILS,
+                  CachingPokemonCatalog.NAMES)) {
             Cache<Object, Object> cache = ((CaffeineCache) manager.getCache(name)).getNativeCache();
             Policy<Object, Object> policy = cache.policy();
             assertThat(policy.expireAfterWrite())

@@ -13,6 +13,7 @@ import static org.mockito.Mockito.times;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
 import com.ballastlane.pokedex.application.port.out.pokemon.PokemonCatalogPort;
 import com.ballastlane.pokedex.domain.localpokemon.UpstreamData;
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.EvolutionStage;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
 import com.ballastlane.pokedex.domain.pokemon.PokemonId;
@@ -43,7 +44,7 @@ class CachingPokemonCatalogTest {
 
   @BeforeEach
   void setUp() {
-    catalog = new CachingPokemonCatalog(source, cache("pages"), cache("details"));
+    catalog = new CachingPokemonCatalog(source, cache("pages"), cache("details"), cache("names"));
   }
 
   @Test
@@ -63,6 +64,42 @@ class CachingPokemonCatalogTest {
     assertThat(second).isEqualTo(first).isEqualTo(page);
     then(source).should(times(1)).findPage(FIRST_THREE);
     then(source).should(times(1)).findPage(new PageRequest(0, 5));
+  }
+
+  @Test
+  void should_askTheSourceOnceForTheNameIndex_when_searchedAgain() {
+    // Given
+    List<CatalogName> names =
+        List.of(
+            new CatalogName(new PokemonId(25), "pikachu"),
+            new CatalogName(new PokemonId(26), "raichu"));
+    given(source.findAllNames()).willReturn(names);
+
+    // When
+    List<CatalogName> first = catalog.findAllNames();
+    List<CatalogName> second = catalog.findAllNames();
+
+    // Then
+    assertThat(second).isEqualTo(first).isEqualTo(names);
+    then(source).should(times(1)).findAllNames();
+  }
+
+  @Test
+  void should_askTheSourceOncePerSetOfNumbers_when_summariesAreRequestedAgain() {
+    // Given
+    List<PokemonId> pikachuAndRaichu = List.of(new PokemonId(25), new PokemonId(26));
+    List<PokemonId> raichuOnly = List.of(new PokemonId(26));
+    given(source.findSummaries(pikachuAndRaichu)).willReturn(List.of());
+    given(source.findSummaries(raichuOnly)).willReturn(List.of());
+
+    // When
+    catalog.findSummaries(pikachuAndRaichu);
+    catalog.findSummaries(List.of(new PokemonId(25), new PokemonId(26)));
+    catalog.findSummaries(raichuOnly);
+
+    // Then
+    then(source).should(times(1)).findSummaries(pikachuAndRaichu);
+    then(source).should(times(1)).findSummaries(raichuOnly);
   }
 
   @Test

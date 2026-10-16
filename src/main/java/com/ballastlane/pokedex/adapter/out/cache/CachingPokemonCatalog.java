@@ -1,7 +1,9 @@
 package com.ballastlane.pokedex.adapter.out.cache;
 
 import com.ballastlane.pokedex.application.port.out.pokemon.PokemonCatalogPort;
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
+import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.shared.Page;
@@ -26,15 +28,21 @@ public class CachingPokemonCatalog implements PokemonCatalogPort {
 
   public static final String PAGES = "pokemon-pages";
   public static final String DETAILS = "pokemon-details";
+  public static final String NAMES = "pokemon-names";
+
+  private static final String ALL_NAMES = "all";
 
   private final PokemonCatalogPort delegate;
   private final Cache pages;
   private final Cache details;
+  private final Cache names;
 
-  public CachingPokemonCatalog(PokemonCatalogPort delegate, Cache pages, Cache details) {
+  public CachingPokemonCatalog(
+      PokemonCatalogPort delegate, Cache pages, Cache details, Cache names) {
     this.delegate = delegate;
     this.pages = pages;
     this.details = details;
+    this.names = names;
   }
 
   @Override
@@ -87,5 +95,17 @@ public class CachingPokemonCatalog implements PokemonCatalogPort {
       }
       throw wrapped;
     }
+  }
+
+  /** The whole index under one key: a search filters it in memory. */
+  @Override
+  public List<CatalogName> findAllNames() {
+    return load(names, ALL_NAMES, delegate::findAllNames);
+  }
+
+  /** Keyed by the numbers asked for: the same search page asks for the same numbers. */
+  @Override
+  public List<PokemonSummary> findSummaries(List<PokemonId> ids) {
+    return load(pages, List.copyOf(ids), () -> delegate.findSummaries(ids));
   }
 }

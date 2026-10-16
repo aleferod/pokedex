@@ -15,6 +15,7 @@ import com.ballastlane.pokedex.domain.pokemon.Height;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
 import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
+import com.ballastlane.pokedex.domain.pokemon.PokemonNameQuery;
 import com.ballastlane.pokedex.domain.pokemon.PokemonNotFoundException;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.pokemon.Weight;
@@ -118,6 +119,65 @@ class PokemonControllerTest {
         .asMap()
         .containsEntry("spriteUrl", null)
         .containsEntry("category", null);
+  }
+
+  @Test
+  void should_searchByNameWithThePaging_when_aNameIsGiven() {
+    // Given
+    PageRequest request = new PageRequest(4, 5);
+    PokemonNameQuery chu = PokemonNameQuery.parse("chu").orElseThrow();
+    given(listPokemon.search(chu, request)).willReturn(Page.of(List.of(BULBASAUR), request, 23));
+
+    // When
+    MvcTestResult result = mvc.get().uri("/api/v1/pokemon?name=CHU&page=4&size=5").exchange();
+
+    // Then
+    assertThat(result).hasStatus(HttpStatus.OK);
+    assertThat(result).bodyJson().extractingPath("$.totalElements").asNumber().isEqualTo(23);
+    assertThat(result).bodyJson().extractingPath("$.totalPages").asNumber().isEqualTo(5);
+    then(listPokemon).should().search(chu, request);
+    then(listPokemon).should(never()).list(any());
+  }
+
+  @Test
+  void should_turnSpacesIntoHyphens_when_searching() {
+    PageRequest defaults = new PageRequest(0, 20);
+    PokemonNameQuery mrMime = PokemonNameQuery.parse("mr-mime").orElseThrow();
+    given(listPokemon.search(mrMime, defaults)).willReturn(Page.of(List.of(), defaults, 0));
+
+    MvcTestResult result =
+        mvc.get().uri("/api/v1/pokemon").queryParam("name", "mr mime").exchange();
+
+    assertThat(result).hasStatus(HttpStatus.OK);
+    then(listPokemon).should().search(mrMime, defaults);
+  }
+
+  @Test
+  void should_listTheCatalog_when_theNameIsBlank() {
+    PageRequest defaults = new PageRequest(0, 20);
+    given(listPokemon.list(defaults)).willReturn(Page.of(List.of(), defaults, 1351));
+
+    MvcTestResult result = mvc.get().uri("/api/v1/pokemon").queryParam("name", " ").exchange();
+
+    assertThat(result).hasStatus(HttpStatus.OK);
+    then(listPokemon).should().list(defaults);
+    then(listPokemon).should(never()).search(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"pi", "pika!", "<b>pika</b>"})
+  void should_return400NamingName_when_theNameBreaksTheRule(String name) {
+    MvcTestResult result = mvc.get().uri("/api/v1/pokemon").queryParam("name", name).exchange();
+
+    assertThat(result)
+        .hasStatus(HttpStatus.BAD_REQUEST)
+        .hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+    assertThat(result).bodyJson().extractingPath("$.errors[0].field").isEqualTo("name");
+    assertThat(result)
+        .bodyJson()
+        .extractingPath("$.errors[0].message")
+        .isEqualTo("must be 3 to 50 letters, digits, hyphens or spaces");
+    then(listPokemon).shouldHaveNoInteractions();
   }
 
   @Test

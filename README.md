@@ -106,6 +106,7 @@ With `SEED_DEMO_DATA=true` (the default in `.env.example` and Compose), the serv
 | Auth | `POST /api/v1/auth/login` → 200 with bearer token | public | ✅ |
 | Auth | `GET /api/v1/auth/me` | bearer | ✅ |
 | US01 Enumeration | `GET /api/v1/pokemon?page=0&size=20` | public | ✅ |
+| US01 Search by part of a name | `GET /api/v1/pokemon?name=pika` (3–50 characters, same paging) | public | ✅ |
 | US02 Detail | `GET /api/v1/pokemon/{idOrName}` | public | ✅ |
 | US03 Sync | `POST /api/v1/local-pokemon/sync/{idOrName}` → 201 import / 200 re-sync | bearer | ✅ |
 | US03 Bulk sync | `POST /api/v1/local-pokemon/sync?limit=N` (1–20, default 10) | bearer | ✅ |
@@ -151,6 +152,19 @@ curl -s 'localhost:8080/api/v1/pokemon?page=0&size=2'
 **When PokeAPI is unreachable, slow (past the 5 s read timeout) or failing after retries:** the API answers in time with **503** `service-unavailable` and `Retry-After: 30`. It never hangs, and never echoes upstream errors.
 
 **How a page is built:** PokeAPI's list endpoint only returns names, so each entry needs `/pokemon/{id}` and `/pokemon-species/{id}`. That's 1 + 2N calls for a page of N. The adapter fetches entries **in parallel on virtual threads**, behind an instance-wide cap (`max-concurrency`, default 8) that protects PokeAPI. A 10-entry page whose upstream calls take 300 ms each returns in well under a second, against 6 s if fetched sequentially. A page that was already served comes from the cache with no upstream calls at all; see [Caching and resilience](#caching-and-resilience).
+
+**Search by part of a name:** `GET /api/v1/pokemon?name=pika` returns only the Pokémon whose name contains the text, in the same order and with the same paging and entries.
+
+```bash
+curl -s 'localhost:8080/api/v1/pokemon?name=pika&size=3'   # pikachu, pikachu-rock-star, pikachu-belle … of 17
+```
+
+- **The text:** it's trimmed and case-insensitive, and spaces count as hyphens (`mr mime` → `mr-mime`, `mr-mime-galar`). It must be **3 to 50** letters, digits or hyphens, otherwise the answer is 400 with `errors[name]`. A blank `name` lists the whole catalog.
+- **How it works:**
+  - PokeAPI has no search, so the API reads its full name list (one request, about 90 KB) and caches it like a page (`pokemon-names`).
+  - The use case filters it by containment; the matching rule lives in the domain's `PokemonNameQuery`.
+  - Only the requested page of matches is fetched in detail, so a search page costs what a catalog page costs.
+- **Not matched:** localized names (that's the local replica) and typos.
 
 ## Detail view (US02)
 

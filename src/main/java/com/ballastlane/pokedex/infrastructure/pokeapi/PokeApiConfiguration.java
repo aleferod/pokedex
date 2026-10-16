@@ -44,7 +44,8 @@ public class PokeApiConfiguration {
     return new CachingPokemonCatalog(
         new PokeApiCatalogAdapter(pokeApiClient, pokeApiFanOut),
         cache(cacheManager, CachingPokemonCatalog.PAGES),
-        cache(cacheManager, CachingPokemonCatalog.DETAILS));
+        cache(cacheManager, CachingPokemonCatalog.DETAILS),
+        cache(cacheManager, CachingPokemonCatalog.NAMES));
   }
 
   private static PokeApiResilience.Settings resilience(PokeApiProperties properties) {

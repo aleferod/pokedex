@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
 import com.ballastlane.pokedex.application.port.out.pokemon.PokemonCatalogPort;
 import com.ballastlane.pokedex.domain.pokemon.BaseStats;
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.EvolutionStage;
 import com.ballastlane.pokedex.domain.pokemon.Height;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
@@ -107,6 +108,16 @@ class GetPokemonDetailUseCaseTest {
           @Override
           public Optional<PokemonDetail> findDetail(PokemonIdentifier identifier) {
             return Optional.of(detail);
+          }
+
+          @Override
+          public List<CatalogName> findAllNames() {
+            throw new UnsupportedOperationException();
+          }
+
+          @Override
+          public List<PokemonSummary> findSummaries(List<PokemonId> ids) {
+            throw new UnsupportedOperationException();
           }
         };
 

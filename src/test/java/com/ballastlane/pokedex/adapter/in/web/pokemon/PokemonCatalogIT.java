@@ -1,10 +1,12 @@
 package com.ballastlane.pokedex.adapter.in.web.pokemon;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -168,6 +170,117 @@ class PokemonCatalogIT {
       throw new IllegalStateException(interrupted);
     }
     return page();
+  }
+
+  @Test
+  void should_findThePokemonWhoseNameContainsTheText_when_searchingByName() {
+    // Given PokeAPI's real name list: 5 names contain "saur"
+    stubNameIndex();
+    stubDetails(1, 2, 3);
+
+    // When / Then
+    client
+        .get()
+        .uri("/api/v1/pokemon?name=SAUR&size=3")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.content[*].name")
+        .isEqualTo(List.of("bulbasaur", "ivysaur", "venusaur"))
+        .jsonPath("$.content[0].category")
+        .isEqualTo("Seed Pokémon")
+        .jsonPath("$.totalElements")
+        .isEqualTo(5)
+        .jsonPath("$.totalPages")
+        .isEqualTo(2);
+  }
+
+  @Test
+  void should_putTheMainFormFirstAndCountEveryMatch_when_searchingForPika() {
+    stubNameIndex();
+    stubDetails(25);
+
+    client
+        .get()
+        .uri("/api/v1/pokemon?name=pika&size=1")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.content[0].id")
+        .isEqualTo(25)
+        .jsonPath("$.content[0].name")
+        .isEqualTo("pikachu")
+        .jsonPath("$.content[0].category")
+        .isEqualTo("Mouse Pokémon")
+        .jsonPath("$.totalElements")
+        .isEqualTo(17);
+  }
+
+  @Test
+  void should_returnAnEmptyPage_when_noNameMatches() {
+    stubNameIndex();
+
+    client
+        .get()
+        .uri("/api/v1/pokemon?name=zzz")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.content")
+        .isEmpty()
+        .jsonPath("$.totalElements")
+        .isEqualTo(0);
+    POKEAPI.verify(0, getRequestedFor(urlPathMatching("/api/v2/pokemon/.*")));
+  }
+
+  @Test
+  void should_loadTheNameIndexOnce_when_searchingTwice() {
+    stubNameIndex();
+    stubDetails(1, 2, 3);
+
+    client.get().uri("/api/v1/pokemon?name=saur&size=3").exchange().expectStatus().isOk();
+    client.get().uri("/api/v1/pokemon?name=ivysaur").exchange().expectStatus().isOk();
+
+    POKEAPI.verify(
+        1,
+        getRequestedFor(urlPathEqualTo("/api/v2/pokemon"))
+            .withQueryParam("limit", equalTo("100000")));
+  }
+
+  @Test
+  void should_answer400NamingNameWithoutCallingPokeApi_when_theNameIsTooShort() {
+    client
+        .get()
+        .uri("/api/v1/pokemon?name=pi")
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[0].field")
+        .isEqualTo("name");
+    POKEAPI.verify(0, getRequestedFor(urlPathMatching("/api/v2/.*")));
+  }
+
+  private static void stubNameIndex() {
+    POKEAPI.stubFor(
+        get(urlPathEqualTo("/api/v2/pokemon"))
+            .withQueryParam("offset", equalTo("0"))
+            .withQueryParam("limit", equalTo("100000"))
+            .willReturn(okJson(PokeApiFixtures.json("list-offset-0-limit-100000.json"))));
+  }
+
+  private static void stubDetails(int... ids) {
+    for (int id : ids) {
+      POKEAPI.stubFor(
+          get(urlPathEqualTo("/api/v2/pokemon/" + id))
+              .willReturn(okJson(PokeApiFixtures.json("pokemon-" + id + ".json"))));
+      POKEAPI.stubFor(
+          get(urlPathEqualTo("/api/v2/pokemon-species/" + id))
+              .willReturn(okJson(PokeApiFixtures.json("species-" + id + ".json"))));
+    }
   }
 
   private static void stubFirstThree(int listDelayMillis) {

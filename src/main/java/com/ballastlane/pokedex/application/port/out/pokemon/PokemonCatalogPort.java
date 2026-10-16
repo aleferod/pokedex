@@ -1,10 +1,13 @@
 package com.ballastlane.pokedex.application.port.out.pokemon;
 
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
+import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.shared.Page;
 import com.ballastlane.pokedex.domain.shared.PageRequest;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,6 +20,20 @@ public interface PokemonCatalogPort {
    * @throws CatalogUnavailableException the source is unreachable, too slow or failing
    */
   Page<PokemonSummary> findPage(PageRequest request);
+
+  /**
+   * Every Pokémon's number and name, in catalog order: the index a name search filters.
+   *
+   * @throws CatalogUnavailableException the source cannot answer right now
+   */
+  List<CatalogName> findAllNames();
+
+  /**
+   * The catalog summaries of these Pokémon, in the given order.
+   *
+   * @throws CatalogUnavailableException the source cannot answer right now
+   */
+  List<PokemonSummary> findSummaries(List<PokemonId> ids);
 
   /**
    * The full detail of one Pokémon; empty when no Pokémon matches.

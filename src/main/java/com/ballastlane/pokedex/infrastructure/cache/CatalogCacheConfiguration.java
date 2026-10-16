@@ -23,7 +23,11 @@ public class CatalogCacheConfiguration {
     CaffeineCacheManager manager = new CaffeineCacheManager();
     manager.setAllowNullValues(false);
     manager.setCacheNames(List.of());
-    for (String name : List.of(CachingPokemonCatalog.PAGES, CachingPokemonCatalog.DETAILS)) {
+    for (String name :
+        List.of(
+            CachingPokemonCatalog.PAGES,
+            CachingPokemonCatalog.DETAILS,
+            CachingPokemonCatalog.NAMES)) {
       manager.registerCustomCache(
           name,
           Caffeine.newBuilder()

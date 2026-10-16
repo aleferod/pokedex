@@ -8,7 +8,9 @@ import com.ballastlane.pokedex.adapter.out.pokeapi.dto.ResourceListDto;
 import com.ballastlane.pokedex.adapter.out.pokeapi.evolution.EvolutionConditions;
 import com.ballastlane.pokedex.application.port.out.pokemon.CatalogUnavailableException;
 import com.ballastlane.pokedex.application.port.out.pokemon.PokemonCatalogPort;
+import com.ballastlane.pokedex.domain.pokemon.CatalogName;
 import com.ballastlane.pokedex.domain.pokemon.PokemonDetail;
+import com.ballastlane.pokedex.domain.pokemon.PokemonId;
 import com.ballastlane.pokedex.domain.pokemon.PokemonIdentifier;
 import com.ballastlane.pokedex.domain.pokemon.PokemonSummary;
 import com.ballastlane.pokedex.domain.shared.Page;
@@ -25,6 +27,9 @@ import java.util.Optional;
  * Pokémon".
  */
 public class PokeApiCatalogAdapter implements PokemonCatalogPort {
+
+  /** More entries than PokeAPI lists (1351 in 2026), so one request returns them all. */
+  static final int ALL_ENTRIES = 100_000;
 
   private final PokeApiClient client;
   private final BoundedFanOut fanOut;
@@ -75,8 +80,36 @@ public class PokeApiCatalogAdapter implements PokemonCatalogPort {
   }
 
   private PokemonSummary summaryOf(NamedResourceDto entry) {
-    PokemonDto pokemon = client.pokemon(PokeApiMapper.idFromUrl(entry.url()));
+    return summaryOf(PokeApiMapper.idFromUrl(entry.url()));
+  }
+
+  private PokemonSummary summaryOf(int id) {
+    PokemonDto pokemon = client.pokemon(id);
     PokemonSpeciesDto species = client.species(PokeApiMapper.idFromUrl(pokemon.species().url()));
     return PokeApiMapper.toSummary(pokemon, species);
+  }
+
+  /** The whole name index in one request (about 90 KB): every entry PokeAPI lists. */
+  @Override
+  public List<CatalogName> findAllNames() {
+    try {
+      return client.listPokemon(0, ALL_ENTRIES).results().stream()
+          .map(
+              entry ->
+                  new CatalogName(
+                      new PokemonId(PokeApiMapper.idFromUrl(entry.url())), entry.name()))
+          .toList();
+    } catch (PokeApiUnavailableException | IllegalArgumentException upstreamFailure) {
+      throw unavailable(upstreamFailure);
+    }
+  }
+
+  @Override
+  public List<PokemonSummary> findSummaries(List<PokemonId> ids) {
+    try {
+      return fanOut.map(ids, id -> summaryOf(id.value()));
+    } catch (PokeApiUnavailableException | IllegalArgumentException upstreamFailure) {
+      throw unavailable(upstreamFailure);
+    }
   }
 }
